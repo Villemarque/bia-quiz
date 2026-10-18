@@ -70,7 +70,8 @@ and `/healthz` to the backend. The shell also exposes `test`, `check`, `fmt`, `l
 | Target | What it does |
 |---|---|
 | `make build` | build the SPA, then the native release binary (embeds `frontend/dist`) |
-| `make cross` | cross-compile Linux **x86_64** with Zig (works from macOS/aarch64) |
+| `make artefacts` | cross-compile Linux **x86_64** and stage binaries/unit in `deploy/artefacts/` |
+| `make cross` / `build-artefact` | aliases for `make artefacts` |
 | `make run` | build, then run on `127.0.0.1:8080` with `BIA_QUIZ_PROF_PASSWORD` and `BIA_QUIZ_ADMIN_PASSWORD` (both `dev` by default) |
 | `make import` | build, download the upstream TSV + figures, then (re)import into `bia.sqlite3` |
 | `make test` | `cargo test --workspace` + `svelte-check` |
@@ -84,7 +85,8 @@ The binary path is resolved with `cargo metadata`, so **`CARGO_TARGET_DIR`**,
 `build.target-dir` in `~/.cargo/config.toml`, and `CARGO_BUILD_TARGET` are honoured
 (`make doctor` prints the resolved path). Override it with `make TARGET_DIR=/path ...`; if `build.target` is set in a Cargo config file (rather than `CARGO_BUILD_TARGET`), also pass `TARGET_TRIPLE=<triple>`.
 Because the target directory may be shared, `make clean` removes only this workspace's
-packages (`cargo clean -p ...`), not the whole cache.
+packages (`cargo clean -p ...`), not the whole cache. `deploy/artefacts/` is gitignored;
+`make clean` removes generated binaries/unit/example there but preserves a local `bia.toml`.
 
 ## Deployment
 

@@ -87,9 +87,9 @@ reachable. The example uses `quiz.asso-triple-a.org`; change it if your hostname
   and enables `apt-daily.timer` / `apt-daily-upgrade.timer`.
 - Installs `fail2ban`, enables the `sshd` jail on `bia_ssh_port`, and starts the service.
 - Installs the `bia-quiz` systemd unit and starts the service once the binary and
-  `/etc/bia-quiz/bia.toml` exist. `bia_app_copy_binary: true` copies
-  `target/release/bia-quiz` from the controller; the config is never templated by this
-  role.
+  `/etc/bia-quiz/bia.toml` exist. `make artefacts` stages the binaries/unit in
+  `deploy/artefacts/`; the role copies them. A staged `deploy/artefacts/bia.toml` is
+  installed if present, but the role never templates secrets itself.
 
 It does **not**: create `/etc/bia-quiz/bia.toml`, import the question bank, configure
 DNS, open ports in a cloud provider firewall, change root login, or remove SSH keys.
@@ -271,17 +271,20 @@ bia_fail2ban_ignoreip: "127.0.0.1/8 ::1"
 ## Application service
 
 ```yaml
-# optional: copy target/release/bia-quiz from the controller
-bia_app_copy_binary: false
+# default: copy the files staged by `make artefacts`
+bia_app_copy_binary: true
 ```
 
-- The role installs `/etc/systemd/system/bia-quiz.service`, enables it and starts it.
+- `make artefacts` stages `bia-quiz`, `bia-import`, `bia-quiz.service` and
+  `bia.toml.example` in the gitignored `deploy/artefacts/` directory.
+- The role copies the binaries and unit from `deploy/artefacts/`.
+- It also installs `deploy/artefacts/bia.toml` if that optional file exists; otherwise
+  `/etc/bia-quiz/bia.toml` must already be present. The config contains passwords, so
+  it is never committed or templated with secrets by this role.
 - It requires `/opt/bia-quiz/bia-quiz` and `/etc/bia-quiz/bia.toml`; if either is
   missing it stops with a clear error instead of starting a broken service.
-- The config contains passwords, so it is deployed manually (or by your secret tooling),
-  not templated by this role.
-- First host-prep run: use `--skip-tags app`; after `deploy/README.md` §4, run
-  `ansible-playbook site.yml --tags app`.
+- First host-prep run: use `--skip-tags app`; after `make artefacts` and the config,
+  run `ansible-playbook site.yml --tags app`.
 - Importing the question bank remains an explicit `/admin` or CLI step; the role does
   not populate the database.
 
@@ -341,9 +344,10 @@ Installed by `ansible-galaxy collection install -r requirements.yml`.
 
 ## App deployment
 
-Continue with [`README.md`](../README.md) §4. The roles create the service account and
-its home; still create `/var/lib/bia-quiz/backups` and install the binary/config as
-described there. Then run the `app` role:
+Continue with [`README.md`](../README.md) §4. On the controller run `make artefacts`;
+the `app` role copies the binaries and unit from `deploy/artefacts/`. Put a real
+`deploy/artefacts/bia.toml` there if you want Ansible to install it, or deploy
+`/etc/bia-quiz/bia.toml` manually (copy the staged `bia.toml.example` and edit it).
 
 ```sh
 ansible-playbook site.yml --tags app

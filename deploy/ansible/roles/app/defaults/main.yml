@@ -2,9 +2,12 @@
 bia_app_service_name: bia-quiz
 bia_app_binary: /opt/bia-quiz/bia-quiz
 bia_app_config: /etc/bia-quiz/bia.toml
-bia_app_service_src: "{{ playbook_dir }}/../bia-quiz.service"
+bia_app_artefact_dir: "{{ playbook_dir }}/../artefacts"
+bia_app_binary_src: "{{ bia_app_artefact_dir }}/bia-quiz"
+bia_app_import_src: "{{ bia_app_artefact_dir }}/bia-import"
+bia_app_service_src: "{{ bia_app_artefact_dir }}/bia-quiz.service"
+# Optional: if present, this file is installed as /etc/bia-quiz/bia.toml.
+bia_app_config_src: "{{ bia_app_artefact_dir }}/bia.toml"
 
-# The binary is a release artifact; leave this false if you deploy it
-# separately, or set true to copy target/release/bia-quiz from the controller.
-bia_app_copy_binary: false
-bia_app_binary_src: "{{ playbook_dir }}/../../target/release/bia-quiz"
+# Artefacts staged by `make artefacts` are copied by default.
+bia_app_copy_binary: true

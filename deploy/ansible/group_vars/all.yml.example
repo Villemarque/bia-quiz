@@ -30,9 +30,10 @@ bia_domain: quiz.asso-triple-a.org
 bia_app_port: 8080
 
 
-# Application service. The binary can be copied from the controller; the config
-# remains a manual/secrets step. The app role waits for both.
-# bia_app_copy_binary: false
+# Application service. `make artefacts` stages binaries/unit in deploy/artefacts;
+# the app role copies them by default. Put a real bia.toml there if you want the
+# role to install it too; otherwise deploy the config manually.
+# bia_app_copy_binary: true
 
 # Debian security updates. Reboot automatically at 03:30 when required.
 bia_enable_unattended_upgrades: true

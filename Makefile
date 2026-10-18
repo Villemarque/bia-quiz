@@ -12,7 +12,7 @@ RELEASE_DIR := $(TARGET_DIR)$(if $(TARGET_TRIPLE),/$(TARGET_TRIPLE),)/release
 BIN         := $(RELEASE_DIR)/bia-quiz
 IMPORT_BIN  := $(RELEASE_DIR)/bia-import
 
-.PHONY: all build cross frontend import run test check clean distclean doctor uname
+.PHONY: all build artefacts build-artefact cross frontend import run test check clean distclean doctor uname
 
 all: build
 
@@ -34,8 +34,9 @@ CROSS_GLIBC  ?= 2.36
 CROSS_DIR    := $(TARGET_DIR)/$(CROSS_TARGET)/release
 CROSS_BIN    := $(CROSS_DIR)/bia-quiz
 CROSS_IMPORT := $(CROSS_DIR)/bia-import
+ARTEFACT_DIR := deploy/artefacts
 
-cross: frontend
+artefacts: frontend
 	@command -v cargo-zigbuild >/dev/null 2>&1 || { \
 		echo "cargo-zigbuild is missing: cargo install cargo-zigbuild" >&2; exit 1; }
 	@command -v zig >/dev/null 2>&1 || { \
@@ -44,7 +45,19 @@ cross: frontend
 		-p bia-server --bin bia-quiz
 	cargo zigbuild --release --target $(CROSS_TARGET).$(CROSS_GLIBC) \
 		-p bia-importer --bin bia-import
-	file $(CROSS_BIN) $(CROSS_IMPORT)
+	mkdir -p $(ARTEFACT_DIR)
+	cp $(CROSS_BIN) $(ARTEFACT_DIR)/bia-quiz
+	cp $(CROSS_IMPORT) $(ARTEFACT_DIR)/bia-import
+	cp deploy/bia-quiz.service $(ARTEFACT_DIR)/bia-quiz.service
+	cp deploy/bia.toml.example $(ARTEFACT_DIR)/bia.toml.example
+	chmod 0755 $(ARTEFACT_DIR)/bia-quiz $(ARTEFACT_DIR)/bia-import
+	chmod 0644 $(ARTEFACT_DIR)/bia-quiz.service $(ARTEFACT_DIR)/bia.toml.example
+	file $(ARTEFACT_DIR)/bia-quiz $(ARTEFACT_DIR)/bia-import
+	@echo "artefacts staged in $(ARTEFACT_DIR)/"
+
+# Compatibility aliases for the previous target name.
+build-artefact: artefacts
+cross: artefacts
 
 # Canonical data lives upstream (plan.md §10). The importer downloads the TSV and
 # figures (Rust HTTP + tar/gzip), then loads SQLite.
@@ -88,6 +101,7 @@ doctor:
 	@echo "server binary      : $(BIN)"
 	@echo "importer binary    : $(IMPORT_BIN)"
 	@echo "cross binary       : $(CROSS_BIN)"
+	@echo "artefacts dir      : $(ARTEFACT_DIR)"
 	@echo "frontend build     : $$(test -f $(FRONTEND)/dist/index.html && echo present || echo missing)"
 	@echo "figures            : $$(ls data/figures 2>/dev/null | wc -l | tr -d ' ') files"
 	@if [ -x "$(BIN)" ]; then \
@@ -106,6 +120,8 @@ doctor:
 clean:
 	cargo clean -p bia-core -p bia-server -p bia-importer
 	rm -rf $(FRONTEND)/dist $(FRONTEND)/node_modules .pnpm-store
+	rm -f $(ARTEFACT_DIR)/bia-quiz $(ARTEFACT_DIR)/bia-import \
+		$(ARTEFACT_DIR)/bia-quiz.service $(ARTEFACT_DIR)/bia.toml.example
 
 # Everything, including the imported database and its report. Destructive.
 distclean: clean

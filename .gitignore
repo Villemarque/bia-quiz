@@ -30,6 +30,7 @@
 /devenv.local.nix
 
 # Local Ansible copies; only *.example files are committed.
+/deploy/artefacts/
 /deploy/ansible/inventory*.yml
 !/deploy/ansible/inventory.example.yml
 /deploy/ansible/group_vars/*.yml

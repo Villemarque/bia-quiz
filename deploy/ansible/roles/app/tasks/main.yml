@@ -10,14 +10,34 @@
     - /opt/bia-quiz
     - /etc/bia-quiz
 
-- name: Copy the application binary
+- name: Copy the application binaries
   ansible.builtin.copy:
-    src: "{{ bia_app_binary_src }}"
-    dest: "{{ bia_app_binary }}"
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
     owner: root
     group: root
     mode: "0755"
+  loop:
+    - { src: "{{ bia_app_binary_src }}", dest: "{{ bia_app_binary }}" }
+    - { src: "{{ bia_app_import_src }}", dest: /opt/bia-quiz/bia-import }
   when: bia_app_copy_binary | bool
+  notify: Restart bia-quiz
+
+- name: Check for a staged app config
+  ansible.builtin.stat:
+    path: "{{ bia_app_config_src }}"
+  delegate_to: localhost
+  become: false
+  register: bia_app_staged_config
+
+- name: Install the staged app config
+  ansible.builtin.copy:
+    src: "{{ bia_app_config_src }}"
+    dest: "{{ bia_app_config }}"
+    owner: root
+    group: bia-quiz
+    mode: "0640"
+  when: bia_app_staged_config.stat.exists
   notify: Restart bia-quiz
 
 - name: Check the application binary and config
@@ -33,8 +53,8 @@
     that:
       - item.stat.exists
     fail_msg: >-
-      Missing {{ item.item }}. Deploy the binary/config as described in
-      deploy/README.md §4, or set bia_app_copy_binary: true for the binary.
+      Missing {{ item.item }}. Run `make artefacts` and deploy the config as
+      described in deploy/README.md §4.
   loop: "{{ bia_app_files.results }}"
   loop_control:
     label: "{{ item.item }}"

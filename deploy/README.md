@@ -180,20 +180,22 @@ the backup directory.
 
 ## 3. Build the binaries
 
-The target server is Linux x86_64 (`uname -m`). `make cross` builds that target; on the
-controller verify with `file target/x86_64-unknown-linux-gnu/release/bia-quiz`.
+The target server is Linux x86_64 (`uname -m`). `make artefacts` builds that target; on
+the controller verify with `file deploy/artefacts/bia-quiz`.
 
 ### Build and upload
 
 Build **Linux x86_64** on the controller regardless of its host OS/CPU:
 
 ```sh
-make cross
-file target/x86_64-unknown-linux-gnu/release/bia-quiz
+make artefacts
+file deploy/artefacts/bia-quiz
 ```
 
-`make cross` uses `cargo-zigbuild` and Zig, with glibc `2.36` by default (works on
-Debian 12 and 13). Prerequisites on the controller:
+`make artefacts` cross-compiles with `cargo-zigbuild` and Zig, then stages
+`bia-quiz`, `bia-import`, `bia-quiz.service` and `bia.toml.example` in the gitignored
+`deploy/artefacts/` directory. The glibc floor is `2.36` by default (works on Debian 12
+and 13). Prerequisites on the controller:
 
 ```sh
 rustup target add x86_64-unknown-linux-gnu
@@ -201,18 +203,16 @@ cargo install cargo-zigbuild
 # Zig: brew install zig, or your package manager
 ```
 
-Override the glibc floor if needed with `make cross CROSS_GLIBC=2.41`. If the controller
-is already x86_64 Linux, plain `make build` also works; a macOS/aarch64 `make build`
-will not.
+Override the glibc floor if needed with `make artefacts CROSS_GLIBC=2.41`. If the
+controller is already x86_64 Linux, plain `make build` also works; a macOS/aarch64
+`make build` will not. `make cross` and `make build-artefact` are aliases.
 
-Create a release bundle (binaries + deploy files):
+For the Ansible path, the `app` role copies the staged files directly from
+`deploy/artefacts/`; there is no separate SCP step. For the manual fallback, create a
+bundle from the same directory:
 
 ```sh
-rm -rf /tmp/bia-quiz-deploy && mkdir -p /tmp/bia-quiz-deploy
-cp target/x86_64-unknown-linux-gnu/release/bia-quiz \
-   target/x86_64-unknown-linux-gnu/release/bia-import /tmp/bia-quiz-deploy/
-cp deploy/bia-quiz.service deploy/bia.toml.example /tmp/bia-quiz-deploy/
-tar -czf bia-quiz-deploy.tgz -C /tmp/bia-quiz-deploy .
+tar -czf bia-quiz-deploy.tgz -C deploy/artefacts .
 scp -P <bia_ssh_port> bia-quiz-deploy.tgz deploy@quiz.asso-triple-a.org:/tmp/
 ```
 
