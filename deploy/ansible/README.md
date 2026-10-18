@@ -213,7 +213,7 @@ bia_app_port: 8080             # must match [server].bind in bia.toml
 
 ```yaml
 bia_enable_unattended_upgrades: true
-bia_unattended_automatic_reboot: false
+bia_unattended_automatic_reboot: true
 bia_unattended_reboot_time: "03:30"
 bia_unattended_remove_unused_kernel_packages: true
 bia_unattended_remove_new_unused_dependencies: false
@@ -221,7 +221,7 @@ bia_unattended_remove_new_unused_dependencies: false
 
 - Applies Debian stable and Debian security updates; the Caddy/Cloudsmith repo is not
   included in the automatic origins.
-- `Automatic-Reboot` is **off** by default; reboot manually during a maintenance window.
+- `Automatic-Reboot` is **on** by default at `03:30`; set `bia_unattended_automatic_reboot: false` if you prefer to reboot manually.
 - Writes `/etc/apt/apt.conf.d/20auto-upgrades` and
   `/etc/apt/apt.conf.d/50unattended-upgrades`.
 - Enables the `apt-daily.timer` and `apt-daily-upgrade.timer` timers.

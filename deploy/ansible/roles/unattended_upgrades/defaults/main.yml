@@ -1,7 +1,7 @@
 ---
 bia_enable_unattended_upgrades: true
 # Reboots are left to the operator by default; the app can be briefly unavailable.
-bia_unattended_automatic_reboot: false
+bia_unattended_automatic_reboot: true
 bia_unattended_reboot_time: "03:30"
 bia_unattended_remove_unused_kernel_packages: true
 bia_unattended_remove_new_unused_dependencies: false

@@ -139,7 +139,8 @@ writes a drop-in config, validates it and restarts SSH. Set `ansible_port` in
 enable UFW if `bia_ssh_port` is missing from the allowed list. Set `bia_enable_ufw: false` only if the
 provider firewall already handles this, and `bia_enable_caddy: false` only if Caddy is
 managed elsewhere. Unattended upgrades are enabled by default and apply Debian stable +
-security updates; set `bia_enable_unattended_upgrades: false` to skip them. The fail2ban
+security updates; automatic reboot is on at `03:30` when required. Set
+`bia_unattended_automatic_reboot: false` to reboot manually instead. The fail2ban
 SSH jail is enabled by default; add trusted CIDRs to `bia_fail2ban_ignoreip`, or set
 `bia_enable_fail2ban: false` to skip it. See [`ansible/README.md`](ansible/README.md)
 for every field.
@@ -440,7 +441,7 @@ sudo systemctl start bia-quiz
 - Time: `timedatectl` (NTP on) — speed scoring uses the server clock.
 - TLS renewal: automatic (Caddy).
 - Updates: the `unattended_upgrades` role configures Debian stable + security updates
-  (automatic reboot off by default); rebuild/redeploy for the app.
+  and reboots automatically at 03:30 when required; rebuild/redeploy for the app.
 
 ## 12. Security notes
 
