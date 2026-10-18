@@ -1,22 +1,28 @@
 # Deploying `bia-quiz` on Debian
 
 A complete runbook starting from a fresh **Debian 12 (bookworm) or Debian 13 (trixie)**
-VM. Host users, UFW, SSH, Caddy, unattended upgrades, fail2ban and the systemd unit are
-managed by [`ansible/`](ansible/); the application binary/config, imports and backups are
-manual. v1 uses **axum-login sessions**
-(`prof` and `admin` accounts) and imports from `/admin` or the CLI.
+VM. Host users, UFW, SSH, Caddy, unattended upgrades, fail2ban and the systemd service are
+managed by [`ansible/`](ansible/). The release binaries and config are staged with
+`make artefacts`; the database import and backups are explicit.
 
 ## Quick start
 
 1. Provision **Debian 13 (trixie)** or **Debian 12 (bookworm)** and point DNS at it
    (§1–§2).
-2. Create the `deploy` admin, the `bia-quiz` service account and configure UFW, SSH,
+2. On the controller, cross-build and stage the release (§3):
+   ```sh
+   make artefacts
+   cp deploy/artefacts/bia.toml.example deploy/artefacts/bia.toml
+   $EDITOR deploy/artefacts/bia.toml
+   ```
+3. Create the `deploy` admin, the `bia-quiz` service account and configure UFW, SSH,
    Caddy, unattended upgrades and fail2ban with [Ansible](ansible/) (§2.5). Skip the
    `app` tag on this first host-prep run.
-3. Build on the controller and upload the bundle (§3).
-4. Install the files (§4), import the bank (§5), then let Ansible install/start the
-   systemd unit (§6).
-5. Run the checklist (§8) and set up backups (§9).
+4. Run the `app` role to copy the artefacts, install the unit and start the service (§6).
+5. Import the question bank from `/admin` (§5).
+6. Run the checklist (§8) and set up backups (§9).
+
+The manual file-install steps in §4 are only needed if you do **not** use the `app` role.
 
 The sections below are the full reference, including upgrades, security and
 troubleshooting.
@@ -32,8 +38,8 @@ troubleshooting.
 | Service | systemd, non-root `bia-quiz`, bound to `127.0.0.1:8080` |
 | Load | one room, ~35 phones, one teacher; 1 vCPU / 1 GB RAM is enough |
 
-The binary is **Linux, dynamically linked to glibc**; SQLite is compiled in (bundled).
-It must match the server CPU architecture (`x86_64` or `aarch64`). See §3.
+The target is **Linux x86_64**; `make artefacts` cross-builds it against glibc 2.36
+(compatible with Debian 12/13). SQLite is compiled in (bundled). See §3.
 
 ## 1. Provision the server
 
@@ -74,16 +80,17 @@ certificate.
 Verify: `dig +short quiz.asso-triple-a.org` returns the server IP. If you use Cloudflare, set
 the record to **DNS only** until the certificate is issued (or use an origin certificate).
 
-## 2.5 Host preparation (Ansible): users, firewall, Caddy, upgrades and fail2ban
+## 2.5 Host preparation (Ansible): users, firewall, SSH, Caddy, upgrades, fail2ban, systemd
 
 The Ansible roles in [`ansible/`](ansible/) manage **Linux users, UFW, SSH, Caddy,
-unattended upgrades, fail2ban and the `bia-quiz` systemd unit**. They do not create the
-application config, database or imports; the binary can be copied optionally with
-`bia_app_copy_binary`. Configured as below, they create the `deploy` admin and the
-`bia-quiz` service account, install the deploy user's SSH key and passwordless sudo,
-configure UFW for SSH/80/443 with a default-deny incoming policy, install/configure Caddy
-for TLS, enable Debian security updates, install the fail2ban SSH jail, and install/start
-the app service (the `app` role is skipped on the first host-prep run).
+unattended upgrades, fail2ban and the `bia-quiz` systemd service**. The `app` role
+copies the binaries from `deploy/artefacts/`, installs the staged config if present, and
+starts the service. It does not import the database. Configured as below, the roles
+create the `deploy` admin and the `bia-quiz` service account, install the deploy user's
+SSH key and passwordless sudo, configure UFW for SSH/80/443 with a default-deny incoming
+policy, install/configure Caddy for TLS, enable Debian security updates, install the
+fail2ban SSH jail, and install/start the app service (the `app` role is skipped on the
+first host-prep run).
 
 Install Ansible on the controller, not on the server:
 
@@ -106,8 +113,12 @@ ansible-playbook site.yml --check --diff --skip-tags app
 ansible-playbook site.yml --skip-tags app
 ```
 
-The `app` role is skipped here because it requires the binary/config installed in §4.
-Run `ansible-playbook site.yml --tags app` after that section.
+The `app` role is skipped here because it requires the artefacts/config from §3. After
+staging them and creating the real `deploy/artefacts/bia.toml`, run:
+
+```sh
+ansible-playbook site.yml --tags app
+```
 
 `inventory.yml` connects as **root** (or the provider's initial sudo user) on a blank
 server:
@@ -175,8 +186,8 @@ sudo systemctl restart ssh
 
 Keep a root/console session open until that is verified.
 
-The role creates `/var/lib/bia-quiz` but not `/var/lib/bia-quiz/backups`; §4.1 creates
-the backup directory.
+The `app` role creates `/var/lib/bia-quiz/backups`; the manual fallback in §4.1 also
+creates it.
 
 ## 3. Build the binaries
 
@@ -216,10 +227,11 @@ cargo install cargo-zigbuild
 
 Override the glibc floor if needed with `make artefacts CROSS_GLIBC=2.41`. If the
 controller is already x86_64 Linux, plain `make build` also works; a macOS/aarch64
+`make build` produces a binary that will not run on this server.
 
-For the Ansible path, the `app` role copies the staged files directly from
-`deploy/artefacts/`; there is no separate SCP step. For the manual fallback, create a
-bundle from the same directory:
+For the Ansible path, the `app` role copies the binaries and optional config from
+`deploy/artefacts/` and reads the unit from `deploy/bia-quiz.service`; there is no
+separate SCP step. For the manual fallback, create a bundle from the same directory:
 
 ```sh
 rm -rf /tmp/bia-quiz-deploy
@@ -236,10 +248,13 @@ mkdir -p /tmp/bia-quiz-deploy
 tar -xzf /tmp/bia-quiz-deploy.tgz -C /tmp/bia-quiz-deploy
 ```
 
-> Build on the **oldest** distro you intend to support: the binary is dynamically linked
-> against glibc. Building on a newer distro can require a newer glibc than the server has.
+> The cross build targets glibc **2.36** by default. If you use native `make build`, build
+> on the oldest supported distro or set `CROSS_GLIBC` to a floor compatible with the server.
 
-## 4. Install the application files
+## 4. Install the application files (manual fallback)
+
+Skip this section if you use the Ansible `app` role: it creates the directories, copies
+the binaries, installs the config when staged, and starts the unit.
 
 ### 4.1 State and config directories
 
@@ -261,9 +276,16 @@ The systemd unit already uses `User=bia-quiz`, `Group=bia-quiz` and
 ```sh
 sudo install -m 0755 /tmp/bia-quiz-deploy/bia-quiz   /opt/bia-quiz/bia-quiz
 sudo install -m 0755 /tmp/bia-quiz-deploy/bia-import /opt/bia-quiz/bia-import
-sudo install -m 0640 -o root -g bia-quiz /tmp/bia-quiz-deploy/bia.toml.example \
-  /etc/bia-quiz/bia.toml
-sudo editor /etc/bia-quiz/bia.toml
+
+# Prefer the real config staged in the bundle; fall back to the example.
+if [ -f /tmp/bia-quiz-deploy/bia.toml ]; then
+  sudo install -m 0640 -o root -g bia-quiz /tmp/bia-quiz-deploy/bia.toml \
+    /etc/bia-quiz/bia.toml
+else
+  sudo install -m 0640 -o root -g bia-quiz /tmp/bia-quiz-deploy/bia.toml.example \
+    /etc/bia-quiz/bia.toml
+  sudo editor /etc/bia-quiz/bia.toml
+fi
 ```
 
 Ownership at this point:
@@ -343,10 +365,10 @@ figures      : 90
 skipped      : 0
 ```
 
-(488 chapterless questions are split between Histoire and Anglais.)
+(488 questions have no chapter; the teacher UI groups them by subject under `Sans chapitre`.)
 
 No outbound HTTPS? Copy `annales-bia.tsv` and `data/figures/` into the temporary work
-directory and drop `--fetch`; the embedded chapter seed is still used.
+directory and drop `--fetch`; the baked-in chapter titles are still used.
 
 Verify:
 
@@ -361,12 +383,28 @@ The TSV and figures are only needed for future refreshes; the database is self-c
 
 ## 6. systemd
 
+Recommended: let the `app` role copy the binaries and staged config, install the unit
+from `deploy/bia-quiz.service`, and start the service:
+
+```sh
+cd deploy/ansible
+ansible-playbook site.yml --tags app
+```
+
+The role requires `deploy/artefacts/bia-quiz` and `/etc/bia-quiz/bia.toml` (staged or
+already installed). Manual fallback:
+
 ```sh
 sudo install -m 0644 /tmp/bia-quiz-deploy/bia-quiz.service \
   /etc/systemd/system/bia-quiz.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now bia-quiz
 sudo systemctl status bia-quiz
+```
+
+Verify either path:
+
+```sh
 systemctl show -p User -p Group -p StateDirectory bia-quiz
 journalctl -u bia-quiz -n 50 --no-pager
 ```
@@ -419,6 +457,8 @@ In a browser:
 The database contains the questions, the 90 figures and the results (~8–10 MB).
 
 ```sh
+sudo install -d -m 0750 -o bia-quiz -g bia-quiz /var/lib/bia-quiz/backups
+
 # one-off, consistent copy while the service runs
 sudo -u bia-quiz sqlite3 /var/lib/bia-quiz/bia.sqlite3 \
   "VACUUM INTO '/var/lib/bia-quiz/backups/bia-$(date +%F).sqlite3'"
@@ -447,12 +487,22 @@ sudo systemctl start bia-quiz
 # 1. backup
 sudo -u bia-quiz sqlite3 /var/lib/bia-quiz/bia.sqlite3 \
   "VACUUM INTO '/var/lib/bia-quiz/backups/pre-upgrade-$(date +%F-%H%M).sqlite3'"
-# 2. keep the previous binary
+
+# 2. on the controller: rebuild/stage, then let the app role restart
+make artefacts
+cd deploy/ansible
+ansible-playbook site.yml --tags app
+```
+
+Manual fallback (keep the previous binary first):
+
+```sh
+# controller
+scp -P <bia_ssh_port> deploy/artefacts/bia-quiz deploy@quiz.asso-triple-a.org:/tmp/
+# server
 sudo cp /opt/bia-quiz/bia-quiz /opt/bia-quiz/bia-quiz.previous
-# 3. install the new one and restart (migrations run at startup)
-sudo install -m 0755 bia-quiz /opt/bia-quiz/bia-quiz
+sudo install -m 0755 /tmp/bia-quiz /opt/bia-quiz/bia-quiz
 sudo systemctl restart bia-quiz
-sudo systemctl status bia-quiz
 ```
 
 If it fails: restore `bia-quiz.previous`, restore the DB backup if the migration ran, and
@@ -498,7 +548,9 @@ sudo systemctl start bia-quiz
 | Symptom | Likely cause / fix |
 |---|---|
 | `502 Bad Gateway` from Caddy | app down or wrong port: `systemctl status bia-quiz`, `ss -ltnp \| grep 8080` |
-| `cannot execute binary file` | wrong OS/CPU: `file /opt/bia-quiz/bia-quiz` vs `uname -m`; rebuild for the target architecture |
+| SSH connection refused after the play | the SSH port changed: use `ssh -p <bia_ssh_port>` and set `ansible_port` |
+| Permission denied (publickey) | use `deploy` + `~/.ssh/bia-quiz-deploy`; password auth is disabled |
+| `cannot execute binary file` | wrong OS/CPU: `file /opt/bia-quiz/bia-quiz` vs `uname -m`; run `make artefacts` |
 | TLS certificate not issued | DNS not pointing at the server, or port 80/443 blocked (provider + `ufw`) |
 | `/figures/…jpeg` 404 | DB has no figures: re-run §5; check `loaded 90 figures` in the journal |
 | `/prof` redirects to `/login` | no session: log in with `prof` or `admin` |

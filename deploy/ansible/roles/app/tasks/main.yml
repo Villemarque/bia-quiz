@@ -10,6 +10,14 @@
     - /opt/bia-quiz
     - /etc/bia-quiz
 
+- name: Create the backup directory
+  ansible.builtin.file:
+    path: /var/lib/bia-quiz/backups
+    state: directory
+    owner: bia-quiz
+    group: bia-quiz
+    mode: "0750"
+
 - name: Copy the application binaries
   ansible.builtin.copy:
     src: "{{ item.src }}"
