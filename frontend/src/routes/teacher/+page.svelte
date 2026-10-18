@@ -2,59 +2,65 @@
   import { onMount } from 'svelte';
   import QRCode from 'qrcode';
   import { QuizClient } from '$lib/stores/quiz.svelte';
-  import { fetchChapters } from '$lib/api';
+  import { fetchCatalog } from '$lib/api';
   import { readSession, writeSession } from '$lib/env';
   import AnswerTile from '$lib/components/AnswerTile.svelte';
   import Scoreboard from '$lib/components/Scoreboard.svelte';
-  import type { Chapter } from '$lib/types';
+  import type { ChapterPick, SubjectCatalog } from '$lib/types';
 
   const client = new QuizClient('teacher');
 
-  let chapters = $state<Chapter[]>([]);
-  let selected = $state<number[]>([]);
-  let picks = $state<Record<number, number>>({});
+  let subjects = $state<SubjectCatalog[]>([]);
+  let selected = $state<string[]>([]);
+  let picks = $state<Record<string, number>>({});
   let seconds = $state(30);
   let qr = $state('');
   let loadError = $state('');
   let settled = $state(false);
 
-  type ChapterGroup = { label: string; numbers?: number[]; from?: number; to?: number };
-  const GROUP_DEFS: ChapterGroup[] = [
-    { label: 'Aéronefs', from: 0, to: 2 },
-    { label: 'Mécanique du vol', from: 3, to: 5 },
-    { label: 'Météo', from: 6, to: 11 },
-    { label: 'Navigation', from: 12, to: 14 },
-    { label: 'Histoire', numbers: [16] },
-    { label: 'Anglais', numbers: [17] },
-    { label: 'Sans chapitre', numbers: [15] },
-  ];
+  type PickItem = {
+    key: string;
+    subject: number;
+    chapter: number | null;
+    label: string;
+    available: number;
+  };
 
-  const DEFAULT_PER_CHAPTER = 10;
+  const DEFAULT_PER_PICK = 10;
 
-  const groupedChapters = $derived(
-    GROUP_DEFS.map((group) => {
-      const items = chapters.filter(
-        (chapter) =>
-          chapter.question_count > 0 &&
-          (group.numbers
-            ? group.numbers.includes(chapter.number)
-            : chapter.number >= (group.from ?? 0) && chapter.number <= (group.to ?? -1)),
-      );
-      return {
-        label: group.label,
-        items,
-        total: items.reduce((sum, chapter) => sum + chapter.question_count, 0),
-      };
-    }).filter((group) => group.total > 0),
+  const subjectGroups = $derived(
+    subjects
+      .map((subject) => {
+        const items: PickItem[] = subject.chapters.map((chapter) => ({
+          key: `${subject.subject}:${chapter.number}`,
+          subject: subject.subject,
+          chapter: chapter.number,
+          label: chapter.title,
+          available: chapter.question_count,
+        }));
+        if (subject.no_chapter_count > 0) {
+          items.push({
+            key: `${subject.subject}:none`,
+            subject: subject.subject,
+            chapter: null,
+            label: 'Sans chapitre',
+            available: subject.no_chapter_count,
+          });
+        }
+        return { ...subject, items };
+      })
+      .filter((subject) => subject.question_count > 0),
   );
 
+  const allItems = $derived(subjectGroups.flatMap((subject) => subject.items));
+
   onMount(() => {
-    fetchChapters()
+    fetchCatalog()
       .then((rows) => {
-        chapters = rows;
+        subjects = rows;
       })
       .catch(() => {
-        loadError = 'Impossible de charger les chapitres (la base est-elle importée ?).';
+        loadError = 'Impossible de charger le catalogue (la base est-elle importée ?).';
       });
     client.connectTeacher(readSession('bia-room') || undefined);
     const timer = window.setTimeout(() => {
@@ -93,7 +99,7 @@
   const showSetup = $derived(settled && !client.roomSeen && client.phase !== 'podium');
 
   const totalPicked = $derived(
-    selected.reduce((sum, number) => sum + (Number(picks[number]) || 0), 0),
+    selected.reduce((sum, key) => sum + (Number(picks[key]) || 0), 0),
   );
 
   const timerWidth = $derived(
@@ -109,28 +115,28 @@
     client.reveal ? Math.max(1, ...client.reveal.counts) : 1,
   );
 
-  function toggleChapter(chapter: Chapter): void {
-    if (selected.includes(chapter.number)) {
-      selected = selected.filter((value) => value !== chapter.number);
-      delete picks[chapter.number];
+  function toggleItem(item: PickItem): void {
+    if (selected.includes(item.key)) {
+      selected = selected.filter((key) => key !== item.key);
+      delete picks[item.key];
       return;
     }
-    selected = [...selected, chapter.number];
-    picks[chapter.number] = Math.max(
-      1,
-      Math.min(DEFAULT_PER_CHAPTER, chapter.question_count),
-    );
+    selected = [...selected, item.key];
+    picks[item.key] = Math.max(1, Math.min(DEFAULT_PER_PICK, item.available));
   }
 
   function create(): void {
-    const chapters = selected
-      .map((number) => ({
-        number,
-        count: Math.max(0, Math.floor(Number(picks[number]) || 0)),
+    const choices: ChapterPick[] = selected
+      .map((key) => allItems.find((item) => item.key === key))
+      .filter((item): item is PickItem => item !== undefined)
+      .map((item) => ({
+        subject: item.subject,
+        chapter: item.chapter,
+        count: Math.max(0, Math.floor(Number(picks[item.key]) || 0)),
       }))
       .filter((pick) => pick.count > 0);
-    if (chapters.length === 0 || totalPicked > 50) return;
-    client.create(chapters, Number(seconds));
+    if (choices.length === 0 || totalPicked > 50) return;
+    client.create(choices, Number(seconds));
   }
 
   function restarted(): void {
@@ -262,40 +268,40 @@
       <div class="stack" style="max-width: 900px">
         <h1>Nouvelle partie</h1>
         <p class="muted">
-          Choisissez un ou plusieurs chapitres, le nombre de questions pour chacun, puis
-          la durée.
+          Choisissez des chapitres, ou « Sans chapitre », le nombre de questions pour
+          chaque sélection, puis la durée.
         </p>
 
         <div class="chapter-groups">
-          {#each groupedChapters as group}
+          {#each subjectGroups as subject}
             <section class="chapter-group">
               <h3>
-                {group.label}
-                <span class="muted small">{group.total} questions</span>
+                {subject.title}
+                <span class="muted small">{subject.question_count} questions</span>
               </h3>
               <div class="chapter-list">
-                {#each group.items as chapter}
-                  <div class="chapter-item" class:is-selected={selected.includes(chapter.number)}>
+                {#each subject.items as item}
+                  <div class="chapter-item" class:is-selected={selected.includes(item.key)}>
                     <label class="chapter-pick">
                       <input
                         type="checkbox"
-                        checked={selected.includes(chapter.number)}
-                        onchange={() => toggleChapter(chapter)}
+                        checked={selected.includes(item.key)}
+                        onchange={() => toggleItem(item)}
                       />
-                      <span>{chapter.title}</span>
+                      <span>{item.label}</span>
                     </label>
                     <span class="muted small" title="Questions disponibles">
-                      {chapter.question_count}
+                      {item.available}
                     </span>
-                    {#if selected.includes(chapter.number)}
-                      <label class="chapter-count" title="Questions à tirer pour ce chapitre">
+                    {#if selected.includes(item.key)}
+                      <label class="chapter-count" title="Questions à tirer">
                         <input
                           type="number"
                           min="1"
-                          max={Math.min(50, chapter.question_count)}
+                          max={Math.min(50, item.available)}
                           step="1"
-                          aria-label={`Nombre de questions pour ${chapter.title}`}
-                          bind:value={picks[chapter.number]}
+                          aria-label={`Nombre de questions pour ${item.label}`}
+                          bind:value={picks[item.key]}
                         />
                         <span class="muted small">q.</span>
                       </label>

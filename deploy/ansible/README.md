@@ -169,6 +169,7 @@ bia_app_port: 8080             # must match [server].bind in bia.toml
 - Caddy handles the WebSocket upgrade, HTTP→HTTPS redirect and certificate renewal.
 - Set `bia_enable_caddy: false` if Caddy is managed elsewhere.
 - The role fails fast if `bia_domain` is still the example or `bia_app_port` is invalid.
+- Rate limiting stays in the application, not in Caddy.
 
 ## Unattended upgrades
 

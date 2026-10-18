@@ -116,7 +116,7 @@ async fn full_question_flow() {
         &mut teacher,
         serde_json::json!({
             "type": "teacher.create",
-            "chapters": [{ "number": 0, "count": 1 }],
+            "chapters": [{ "subject": 2, "chapter": 0, "count": 1 }],
             "seconds": 5
         }),
     )

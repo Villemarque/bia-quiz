@@ -2,6 +2,7 @@
   "name": "bia-quiz-frontend",
   "private": true,
   "version": "0.1.0",
+  "repository": "https://github.com/Villemarque/bia-quiz",
   "type": "module",
   "scripts": {
     "dev": "vite",

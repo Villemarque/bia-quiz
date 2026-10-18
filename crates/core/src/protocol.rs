@@ -14,7 +14,9 @@ pub enum Phase {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChapterPick {
-    pub number: i32,
+    pub subject: i32,
+    /// `None` selects questions from this subject that have no chapter.
+    pub chapter: Option<i32>,
     pub count: u32,
 }
 

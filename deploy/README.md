@@ -239,7 +239,7 @@ sudo -u bia-quiz test -w /var/lib/bia-quiz && echo "state writable"
 [server]
 bind = "127.0.0.1:8080"
 public_base_url = "https://quiz.example.org"   # QR codes + secure cookies
-source_url = "https://github.com/<you>/<repo>"  # AGPL network-use obligation
+source_url = "https://github.com/Villemarque/bia-quiz"  # AGPL network-use obligation
 
 [db]
 path = "/var/lib/bia-quiz/bia.sqlite3"
@@ -353,7 +353,7 @@ curl -s -o /tmp/f.jpeg -w '%{http_code} %{content_type}\n' \
   https://quiz.example.org/figures/2015-000.jpeg            # 200 image/jpeg
 curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://quiz.example.org/prof
 # 303 to /login without a session; 200 in a logged-in browser
-curl -s https://quiz.example.org/api/chapters | head -c 120 # JSON incl. chapters 16/17
+curl -s https://quiz.example.org/api/chapters | head -c 120 # subject + chapter catalog
 ```
 
 In a browser:
@@ -435,7 +435,8 @@ sudo systemctl start bia-quiz
   lost on restart. `/admin` requires the `admin` role.
 - `/api/prof/*` and `/api/admin/*` are session-protected; `/healthz`, `/figures`, `/ws` and
   `/api/chapters` are public by design.
-- Rate limit: 240 requests/minute/IP (`limits.requests_per_ip_per_minute`).
+- Rate limiting: the app applies a per-IP request window (240/min by default) plus a
+  login-failure limiter (5 / 15 min).
 - Run as `bia-quiz`, never root; `ProtectSystem=strict` + `ReadWritePaths` in the unit.
 - The DB contains personal data (nicknames + results, kept indefinitely). Back it up
   securely; revisit the retention policy if the school requires it.

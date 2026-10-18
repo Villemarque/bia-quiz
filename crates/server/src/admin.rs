@@ -191,7 +191,6 @@ fn spawn_job(state: AppState) {
                     tsv: work.path().join("annales-bia.tsv"),
                     db: db_path.clone(),
                     images: work.path().join("figures"),
-                    chapters: None,
                     report: work.path().join("import-report.txt"),
                     fetch: true,
                     upstream,

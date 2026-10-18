@@ -2,6 +2,7 @@
 
 Live, teacher-paced quiz for the French **BIA** exam, built on the
 [annales database](https://github.com/Villemarque/bia-annales-database-csv).
+Source: [`Villemarque/bia-quiz`](https://github.com/Villemarque/bia-quiz).
 
 The professor projects the question; students answer with four big buttons on their
 phones. Points depend on correctness and speed (0–1000, sigmoid curve). After each
@@ -17,11 +18,10 @@ question the projector shows the answer then the top 7; the session ends with a 
 
 ```
 crates/core       domain types, Diesel schema, scoring, draw, protocol
-crates/server     axum app: WS room actor, static assets, /prof, /admin, auth, rate limit
-crates/importer   bia-import: TSV -> SQLite (warn + skip, no quarantine)
+crates/server     axum app: WS room actor, static assets, /prof, /admin, auth
+crates/importer   bia-import: TSV -> SQLite, baked-in chapter titles (warn + skip)
 crates/server/migrations  Diesel migrations (schema source of truth)
 frontend/         Svelte SPA (src/routes, src/lib, static/fonts)
-data/chapters.toml  18 chapter titles (embedded in the importer at build time)
 data/figures/       90 .jpeg named <attachment_link>.jpeg (import source; also stored in SQLite)
 deploy/           systemd unit, Caddyfile, bia.toml example, cloud-server runbook
 plan.md           the design decisions and rationale
@@ -49,6 +49,21 @@ Open <http://localhost:8080>: the landing page joins a game, `/teacher` starts o
 
 The release binary embeds `frontend/dist` at compile time. Figures are stored in SQLite
 by `bia-import` and served from the database at runtime.
+
+## Development environment (devenv)
+
+[devenv](https://devenv.sh/) provides Rust, Node 22, pnpm, SQLite, Caddy, Ansible and
+the deploy linting tools. It is optional; the `Makefile` remains the source of truth.
+
+```sh
+direnv allow          # or: devenv shell
+setup                 # pnpm install + make build
+devenv up             # backend on :8080 + Vite on :5173
+```
+
+With `devenv up`, open <http://localhost:5173>; Vite proxies `/api`, `/ws`, `/figures`
+and `/healthz` to the backend. The shell also exposes `test`, `check`, `fmt`, `lint`,
+`import`, `db`, `ansible-check` and `ansible-lint`.
 
 ## Make targets
 
@@ -85,7 +100,7 @@ an environment variable:
 | `server.bind` | `BIA_QUIZ_BIND` | `127.0.0.1:8080` |
 | `server.public_base_url` | `BIA_QUIZ_PUBLIC_BASE_URL` | `http://localhost:8080` |
 | `server.max_players` | `BIA_QUIZ_MAX_PLAYERS` | `60` |
-| `server.source_url` | `BIA_QUIZ_SOURCE_URL` | empty (AGPL footer link) |
+| `server.source_url` | `BIA_QUIZ_SOURCE_URL` | `https://github.com/Villemarque/bia-quiz` (AGPL footer link) |
 | `db.path` | `BIA_QUIZ_DB_PATH` | `bia.sqlite3` |
 | `auth.session_hours` | `BIA_QUIZ_SESSION_HOURS` | `12` |
 | `prof.user` | `BIA_QUIZ_PROF_USER` | `prof` |
@@ -113,8 +128,8 @@ bia-import --tsv annales-bia.tsv --db bia.sqlite3 --images data/figures \
 # or: bia-import --fetch ... (download the upstream TSV + figures, then import)
 ```
 
-Chapter titles come from `data/chapters.toml` embedded in the importer at build time; the
-CLI's optional `--chapters` flag only overrides that seed.
+Chapter titles are baked into the importer as a Rust constant; there is no chapters file
+or CLI option.
 
 `make import` first pulls the latest upstream archive
 (`site/static/annales-bia.tsv` and `site/static/img-sujets/*.jpeg`) from GitHub, then
@@ -129,14 +144,15 @@ make UPSTREAM=https://github.com/Villemarque/bia-annales-database-csv/archive/<r
   serves it from SQLite; `data/figures/` is only the import source.
 - Uses a **quoted TSV** parser (fields contain embedded newlines).
 - Upserts on `qid`, so re-running is idempotent.
-- Warns and **skips** rows it cannot use (missing figure, bad answer…); blank chapters
-  are split by subject: Histoire (chapter 16), Anglais (17), otherwise Sans chapitre (15).
+- Warns and **skips** rows it cannot use (missing figure, bad answer…). A blank
+  `chapter` field imports the question with **no chapter membership**; the teacher UI
+  groups those questions by subject under a `Sans chapitre` item when present.
 - Accepts an optional **16th `seconds` column** (5–600) for a per-question countdown;
   without it (or empty) the session setting applies (default 30 s). The upstream TSV has
   15 columns, so a fetch overwrites a locally added column.
   Nothing is quarantined; the report lists every skipped row with its reason.
-- Current file: **1 464 imported**, 0 skipped; the 488 chapterless rows are split
-  Histoire (244, chapter 16) / Anglais (244, chapter 17).
+- Current file: **1 464 imported**, 0 skipped; 488 questions have no chapter, split by
+  subject: Histoire (244) and Anglais (244).
 
 ## Tests
 
@@ -168,7 +184,8 @@ and on pull requests:
   live.
 - **Results kept indefinitely** with nicknames (personal data).
 - No sound; figures are shown on the projector only (phones are buttons-only).
-- Rate limiting is a per-IP window plus a login-failure limiter (5 / 15 min).
+- Rate limiting is in the app: a per-IP window over HTTP requests plus a login-failure
+  limiter (5 failures / 15 min per IP + username).
 
 ## Licence
 

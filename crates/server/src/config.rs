@@ -82,7 +82,7 @@ impl Default for ServerConfig {
             bind: "127.0.0.1:8080".into(),
             public_base_url: "http://localhost:8080".into(),
             max_players: 60,
-            source_url: String::new(),
+            source_url: "https://github.com/Villemarque/bia-quiz".into(),
         }
     }
 }

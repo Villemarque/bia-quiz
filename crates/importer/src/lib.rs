@@ -17,16 +17,29 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use flate2::read::GzDecoder;
-use serde::Deserialize;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../server/migrations");
-pub const NO_CHAPTER: i32 = 15;
-pub const HISTORY_CHAPTER: i32 = 16;
-pub const ENGLISH_CHAPTER: i32 = 17;
 pub const DEFAULT_UPSTREAM: &str =
     "https://github.com/Villemarque/bia-annales-database-csv/archive/refs/heads/master.tar.gz";
-/// Embedded chapter seed: the deployed binary never needs a chapters file.
-const DEFAULT_CHAPTERS: &str = include_str!("../../../data/chapters.toml");
+/// Baked-in chapter titles; the importer has no chapters configuration.
+const CHAPTERS: [(i32, &str); 15] = [
+    (0, "1.1 Les aéronefs"),
+    (1, "1.2 Instrumentation"),
+    (2, "1.3 Moteurs"),
+    (3, "2.1 La sustentation de l'aile"),
+    (4, "2.2 Le vol stabilisé"),
+    (5, "2.3 L'aérostation et le vol spatial"),
+    (6, "3.1 L'atmosphère"),
+    (7, "3.2 Les masses d'air et les fronts"),
+    (8, "3.3 Les nuages"),
+    (9, "3.4 Les vents"),
+    (10, "3.5 Les phénomènes dangereux"),
+    (11, "3.6 L'information météo"),
+    (12, "4.1 Réglementation"),
+    (13, "4.2 Sécurité des vols (SV) et facteurs humains (FH)"),
+    (14, "4.3 Navigation"),
+];
+
 const HEADER: [&str; 15] = [
     "qid",
     "year",
@@ -54,9 +67,6 @@ pub struct Args {
     pub db: PathBuf,
     #[arg(long, default_value = "data/figures")]
     pub images: PathBuf,
-    /// Optional chapters TOML; the embedded seed is used by default.
-    #[arg(long)]
-    pub chapters: Option<PathBuf>,
     #[arg(long, default_value = "import-report.txt")]
     pub report: PathBuf,
     /// Download the upstream TSV and figures before importing.
@@ -134,17 +144,6 @@ pub fn extract_archive<R: Read>(reader: R, tsv: &Path, images: &Path) -> anyhow:
     Ok(())
 }
 
-#[derive(Deserialize)]
-struct ChaptersFile {
-    chapter: Vec<ChapterSeed>,
-}
-
-#[derive(Deserialize)]
-struct ChapterSeed {
-    number: i32,
-    title: String,
-}
-
 #[derive(Debug, Default, Clone, serde::Serialize)]
 pub struct Report {
     pub read: usize,
@@ -219,38 +218,16 @@ pub fn setup_connection(path: &Path) -> Result<SqliteConnection> {
     Ok(conn)
 }
 
-fn seed_chapters(conn: &mut SqliteConnection, path: Option<&Path>) -> Result<()> {
-    let (raw, source) = match path {
-        Some(path) => (
-            std::fs::read_to_string(path)
-                .with_context(|| format!("cannot read chapters file {}", path.display()))?,
-            path.display().to_string(),
-        ),
-        None => (
-            DEFAULT_CHAPTERS.to_string(),
-            "embedded chapters".to_string(),
-        ),
-    };
-    let parsed: ChaptersFile = toml::from_str(&raw).context("invalid chapters TOML")?;
-    if parsed.chapter.is_empty() {
-        bail!("{source} defines no [[chapter]]");
-    }
-    let mut seen = HashSet::new();
-    for seed in &parsed.chapter {
-        if !(0..=17).contains(&seed.number) {
-            bail!("chapter {} is outside 0..=17", seed.number);
-        }
-        if !seen.insert(seed.number) {
-            bail!("chapter {} is defined twice", seed.number);
-        }
+fn seed_chapters(conn: &mut SqliteConnection) -> Result<()> {
+    for (number, title) in CHAPTERS {
         diesel::insert_into(chapters::table)
             .values(NewChapter {
-                number: seed.number,
-                title: seed.title.clone(),
+                number,
+                title: title.to_string(),
             })
             .on_conflict(chapters::number)
             .do_update()
-            .set(chapters::title.eq(seed.title.as_str()))
+            .set(chapters::title.eq(title))
             .execute(conn)?;
     }
     Ok(())
@@ -273,14 +250,6 @@ struct Prepared {
 
 fn field(record: &csv::StringRecord, index: usize) -> &str {
     record.get(index).unwrap_or("")
-}
-
-fn blank_chapter(subject: i32) -> i32 {
-    match subject {
-        4 => HISTORY_CHAPTER,
-        5 => ENGLISH_CHAPTER,
-        _ => NO_CHAPTER,
-    }
 }
 
 fn parse_row(
@@ -327,11 +296,7 @@ fn parse_row(
 
     let chapter_field = field(record, 12).trim();
     let mut chapter_numbers = Vec::new();
-    if chapter_field.is_empty() {
-        // Unclassified questions are selectable categories, split by subject:
-        // Histoire (16), Anglais (17), otherwise the generic Sans chapitre (15).
-        chapter_numbers.push(blank_chapter(subject));
-    } else {
+    if !chapter_field.is_empty() {
         for part in chapter_field.split(',') {
             let number: i32 = part.trim().parse().map_err(|_| "bad_chapter")?;
             if !(0..=14).contains(&number) || !known_chapters.contains_key(&number) {
@@ -409,7 +374,7 @@ pub fn run(
         }
     }
 
-    seed_chapters(conn, args.chapters.as_deref())?;
+    seed_chapters(conn)?;
 
     let chapter_ids: HashMap<i32, i32> = chapters::table
         .load::<Chapter>(conn)?
@@ -593,13 +558,6 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn blank_chapters_are_split_by_subject() {
-        assert_eq!(blank_chapter(2), NO_CHAPTER);
-        assert_eq!(blank_chapter(4), HISTORY_CHAPTER);
-        assert_eq!(blank_chapter(5), ENGLISH_CHAPTER);
-    }
-
-    #[test]
     fn imports_optional_seconds_column() {
         let dir = tempfile::tempdir().unwrap();
         let images = dir.path().join("figures");
@@ -638,7 +596,6 @@ mod tests {
             tsv,
             db: dir.path().join("seconds.sqlite3"),
             images,
-            chapters: None,
             report: dir.path().join("report.txt"),
             fetch: false,
             upstream: DEFAULT_UPSTREAM.to_string(),
@@ -711,7 +668,7 @@ mod tests {
         ])
         .unwrap();
 
-        // 3. no chapter -> skipped
+        // 3. no chapter -> imported with no question_chapters row
         w.write_record([
             "A3",
             "2024",
@@ -808,7 +765,6 @@ mod tests {
             tsv,
             db: dir.path().join("test.sqlite3"),
             images,
-            chapters: None,
             report: dir.path().join("report.txt"),
             fetch: false,
             upstream: DEFAULT_UPSTREAM.to_string(),
@@ -837,6 +793,12 @@ mod tests {
         assert_eq!(a2.attachment_link.as_deref(), Some("2015-000"));
         let a6 = loaded.iter().find(|q| q.qid == "A6").unwrap();
         assert_eq!(a6.text, "Ligne 1\nLigne 2");
+        let a3_links: i64 = question_chapters::table
+            .filter(question_chapters::question_qid.eq("A3"))
+            .count()
+            .get_result(&mut conn)
+            .unwrap();
+        assert_eq!(a3_links, 0, "A3 has no chapter membership");
     }
 
     #[test]
@@ -895,7 +857,6 @@ mod tests {
             tsv,
             db: dir.path().join("test.sqlite3"),
             images,
-            chapters: None,
             report: dir.path().join("report.txt"),
             fetch: false,
             upstream: DEFAULT_UPSTREAM.to_string(),
@@ -917,8 +878,8 @@ mod tests {
                 .count()
                 .get_result::<i64>(&mut conn)
                 .unwrap(),
-            5,
-            "A1/ch0, A2/ch3, A2/ch4, A3/ch15, A6/ch14"
+            4,
+            "A1/ch0, A2/ch3, A2/ch4, A6/ch14"
         );
         assert_eq!(
             figures::table.count().get_result::<i64>(&mut conn).unwrap(),

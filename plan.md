@@ -5,7 +5,7 @@ built on the existing material in this repository.
 
 - **Question source of truth:** [`Villemarque/bia-annales-database-csv`](https://github.com/Villemarque/bia-annales-database-csv) — 1 464 exam questions, 2015–2026. The local `annales-bia.tsv` is **byte-identical** to `site/static/annales-bia.tsv` (sha256 `b0974c4a…`, 348 522 bytes).
 - **Figures:** `site/static/img-sujets/` in the same repo — 90 `.jpeg` files named `<attachment_link>.jpeg`; all 90 references match, no orphans.
-- **Chapter taxonomy:** the 15 upstream chapters (indices 0–14) are defined in that repo's README; we add local categories: `Sans chapitre` (15), Histoire (16), Anglais (17). See §10.2.
+- **Chapter taxonomy:** the 15 upstream chapters (indices 0–14) are defined in that repo's README and baked into the importer. A blank chapter means **no chapter membership**; the teacher UI groups chapterless questions under their subject. See §10.2.
 - **Visual identity:** `charte-graphique.html` — BIA · Aérien Ambassadeurs Avenir (Triple A).
 - **Licence:** `LICENSE` is **AGPL‑3.0**.
 
@@ -55,11 +55,11 @@ multi-school hosting · Postgres · question editor UI · sound.
 | 9 | Config | **`bia.toml`**, environment variables override |
 | 10 | Question import | **Separate `bia-import` command**: idempotent, and it **warns and skips** any row it cannot use instead of storing it. Nothing is quarantined |
 | 11 | Images | **Included in v1**: the 190 figure-dependent questions are imported; the 90 `.jpeg` are **stored in SQLite** (`figures` table) and served at `/figures/<attachment_link>.jpeg` (§10.4) |
-| 12 | Unassigned questions | **Blank chapter (488) → Histoire (16) or Anglais (17)** by `subject`, `Sans chapitre` (15) as fallback. Chapter `0` is a real chapter (`1.1 Les aéronefs`, 157 records) |
+| 12 | Unassigned questions | **Blank chapter (488) → no `question_chapters` row**. The teacher UI groups them by `subject` under a `Sans chapitre` item. Chapter `0` is a real chapter (`1.1 Les aéronefs`, 157 records) |
 | 13 | Professor auth | **None** — the teacher console is open to anyone with the URL (accepted risk, §11) |
 | 14 | Results & admin auth | **Session auth via `axum-login`**: two config accounts (`prof`, `admin`), plaintext passwords hashed at startup; `/prof` and `/admin` protected, teacher console stays open (§7.7) |
 | 15 | Results | Stored in SQLite, readable **only** from `/prof`, **retained indefinitely** (accepted risk) |
-| 16 | Hardening | Per-IP **rate limit** + `/healthz` endpoint |
+| 16 | Hardening | **Per-IP rate limit** + `/healthz` endpoint |
 | 17 | Room state | **In memory**; results **persisted** as they happen. A restart kills the live game, never a finished session |
 | 18 | Concurrent rooms | **One active room only**; a second start is refused with a clear message |
 | 19 | Student screen | **Buttons only** — no question text, no answer text |
@@ -125,18 +125,19 @@ clock offset measured on connect, so phone clock drift cannot affect scoring.
 
 ### Session configuration (teacher)
 
-- Chapters: multi-select (checkbox list, French titles, question counts shown). Each
-  selected chapter gets its own question count (default **10**, capped at the chapter's
-  pool); the total is capped at **50**.
+- Subjects: Aéronefs, Mécanique du vol, Météo, Navigation, Histoire, Anglais.
+- Inside each subject: its chapters, plus a `Sans chapitre` item when that subject has
+  chapterless questions. Each selected item gets its own count (default **10**); the
+  total is capped at **50**.
 - Seconds per question: session fallback **30**; a question's optional `seconds` value wins.
 - Start → a room code and QR code appear on the projector.
 
 ### Draw rule
 
-Random selection inside the union of the chosen chapters, excluding every question
-already used **in this session**. If a chapter has fewer usable questions than
-requested (chapter 11 has only 11, chapter 5 has 23 — see §10.3), the session draws
-what exists and warns the teacher before starting.
+Random selection inside each selected subject/chapter pool (or subject/no-chapter
+pool), excluding every question already used **in this session**. If a pool has fewer
+usable questions than requested, the session draws what exists and warns the teacher
+before starting.
 
 A question belongs to **every** chapter listed in its `chapter` field: the upstream
 format allows a comma-separated list, so a question tagged `3,4` can be drawn from
@@ -344,9 +345,8 @@ Speed is measured **server-side** from the moment the question opens, using the
 | `crates/core` | Domain types, the **scorer**, the room state machine, draw logic, protocol message types. Pure, heavily unit-tested. |
 | `crates/server` | axum app: embeds `frontend/dist` and the Diesel migrations; serves the SPA, `/figures/*` (from SQLite), the WebSocket, `/healthz`, `/prof`, `/admin`, the rate limiter, config loading. |
 | `crates/server/src/auth.rs` | axum-login backend (config accounts, Argon2id), role checks, login/logout handlers, login rate limit (§7.7). |
-| `crates/importer` | `bia-import` binary: reads the TSV, validates, **warns and skips unusable rows**, upserts the rest into SQLite, prints a report. Never runs inside the server. |
+| `crates/importer` | `bia-import` binary: reads the TSV, validates, **warns and skips unusable rows**, upserts the rest into SQLite, prints a report. Bakes the 15 chapter titles into the binary; no chapters file or flag (§10.2). Never runs inside the server. |
 | `frontend/` | Svelte + Vite + pnpm, tree shaped like SvelteKit (§7.6): `src/routes/`, `src/lib/`, `static/`, plus the shared charte CSS tokens. |
-| `data/chapters.toml` | Chapter number → French title seed, embedded at build time (§10.2). |
 | `data/figures/` | The 90 upstream `.jpeg` figures, vendored byte-for-byte; `bia-import` stores them in SQLite (§10.4). |
 | `deploy/` | systemd unit, sample `Caddyfile`, `bia.toml` example, install/upgrade notes. |
 
@@ -642,7 +642,7 @@ Notes:
   `PRAGMA foreign_keys = ON` (plus `journal_mode = WAL` and a `busy_timeout`) on every
   pooled connection.
 - `used_fixed` records whether `content_fixed` supplied the wording (§8 rule 6);
-  `subject` 0–5 is stored for a future filter and is unused in v1.
+  `subject` 0–5 groups the teacher selector into subjects and scopes chapterless pools.
 
 ### 7.5 Schema evolution
 
@@ -852,8 +852,8 @@ validated local `next` (default `/prof`) or re-renders the form with an error. `
 **CSRF.** The cookie is `SameSite=Lax`; every mutating handler also checks that
 `Origin` / `Sec-Fetch-Site` is same-origin. No separate token in v1.
 
-**Brute force.** The global per-IP limit stays; add a login-specific limiter of 5 failures
-per (IP, username) per 15 minutes, with a generic error message.
+**Brute force.** The global per-IP window applies, plus a login-specific limiter of 5
+failures per (IP, username) per 15 minutes, with a generic error message.
 
 
 ---
@@ -861,7 +861,7 @@ per (IP, username) per 15 minutes, with a generic error message.
 ## 8. Import contract (`bia-import`)
 
 Input: `--tsv annales-bia.tsv`, `--db bia.sqlite3`, `--images data/figures` (required in
-v1); `data/chapters.toml` is embedded at build time (the CLI can override it).
+v1). Chapter titles are baked into the importer; there is no chapters configuration.
 Idempotent: **upsert on `qid`**, so re-running after a
 TSV fix is safe.
 
@@ -872,12 +872,12 @@ Rules (in order):
 | 1 | Parse with a **quoted TSV reader** (RFC 4180 style), never by splitting lines: several fields contain embedded newlines and `"` quotes — the file has 1 477 physical lines for **1 464 records**. Accept 15 columns, or 16 with a trailing `seconds` column. Blank lines are dropped |
 | 2 | Duplicate `qid` → the first row wins; the others are **warned and skipped** (`duplicate_qid`). None today: all 1 464 `qid` are unique |
 | 3 | Defensive guard — not triggered by the current file, kept so a future edit cannot corrupt the DB silently: missing `qid`, `answer` outside `0..=3`, or an empty choice → **warn and skip** (`bad_row`), never dropped without a warning |
-| 4 | `chapter` blank → attach to **Histoire (16)** when `subject = 4`, **Anglais (17)** when `subject = 5`, otherwise `Sans chapitre` (15). Otherwise split on commas, trim and dedupe; each value must be an integer **0–14**, and one `question_chapters` row is written per chapter |
+| 4 | `chapter` blank → **no `question_chapters` row** (chapterless). Otherwise split on commas, trim and dedupe; each value must be an integer **0–14**, and one `question_chapters` row is written per chapter |
 | 5 | `attachment_link` non-empty → the importer **requires** `<images>/<attachment_link>.jpeg`; a missing file is a **warn and skip** (never import a question whose figure is absent). All 190 such rows resolve today (§10.4) |
 | 6 | `text` = `content_fixed` when non-empty, else `content_verbatim`; `used_fixed` (bool) records which was used |
 | 7 | `mixed_choices` is parsed to a real **boolean**: `TRUE` → true (925), `FALSE` or blank → false (13 + 526). True means the four choices are **shuffled at display time** (§4); the stored `answer_idx` is never rewritten |
 | 8 | ⚠ optional safeguard to confirm: also **warn and skip** rows whose *displayed* text refers to a figure (`ci-contre`, `photographie`, `schéma`, `figure`, `graphique`) even without an `attachment_link` — v1 then ships zero broken questions |
-| 9 | Every chapter number that survives rule 4 must exist in the embedded `data/chapters.toml` (0–14); a missing title is a hard error, so a mis-typed chapter cannot silently vanish |
+| 9 | Every chapter number that survives rule 4 must exist in the baked-in chapter table (0–14); a missing title is a hard error, so a mis-typed chapter cannot silently vanish |
 | 10 | Optional 16th column `seconds` (integer 5–600): stored per question; empty/absent means the session fallback (default 30 s). A non-numeric or out-of-range value is a `bad_seconds` warn-and-skip |
 
 **Skipped rows are not stored anywhere** — there is no quarantine table and no
@@ -1002,7 +1002,7 @@ counts as false.
 
 The indices in the `chapter` field are defined by the source repository, and they do not
 match the subject numbers — the README warns *« les chapitres ne correspondent pas au
-label »*. The embedded `data/chapters.toml` seeds these 15 upstream titles plus the local category:
+label »*. The importer bakes these 15 upstream titles into the binary:
 
 | # | Title |
 |---|-------|
@@ -1021,19 +1021,17 @@ label »*. The embedded `data/chapters.toml` seeds these 15 upstream titles plus
 | 12 | 4.1 Réglementation |
 | 13 | 4.2 Sécurité des vols (SV) et facteurs humains (FH) |
 | 14 | 4.3 Navigation |
-| 15 | Sans chapitre (fallback, empty today) |
-| 16 | Sans chapitre (Histoire) |
-| 17 | Sans chapitre (Anglais) |
 
 The `chapter` field may hold a **comma-separated list** (one question can belong to
 several chapters); the importer splits it and the UI shows the titles. The `subject`
-field (0–5: météo, mécanique du vol, aéronef, navigation, histoire, anglais) is a
-separate exam taxonomy and is not used for selection in v1.
+field (0–5: météo, mécanique du vol, aéronef, navigation, histoire, anglais) drives the
+teacher's subject groups; a question with no chapter appears under its subject's
+`Sans chapitre` item.
 
 ### 10.3 What v1 actually has
 
 Computed from the file with the §8 rules (all rows imported, valid `answer`), chapter 0
-and the chapterless categories included:
+and chapterless questions counted separately:
 
 | | records |
 |---|---|
@@ -1057,9 +1055,8 @@ and the chapterless categories included:
 | 12 | 4.1 Réglementation | 129 |
 | 13 | 4.2 Sécurité des vols (SV) et facteurs humains (FH) | 25 |
 | 14 | 4.3 Navigation | 90 |
-| 15 | Sans chapitre | 0 |
-| 16 | Sans chapitre (Histoire) | 244 |
-| 17 | Sans chapitre (Anglais) | 244 |
+
+488 questions have no chapter: Histoire (244, subject 4) and Anglais (244, subject 5).
 
 All 190 figure-dependent rows resolve to **90 distinct `.jpeg` files** (each figure is
 shared by about two questions).
@@ -1103,6 +1100,7 @@ at import time (§8 rule 5).
 Shipped anyway, because they are cheap and reduce the blast radius:
 
 - Per-IP request rate limit (config `limits.requests_per_ip_per_minute`).
+- Login-failure limiter (5 failures / 15 min per IP + username).
 - `/healthz`.
 - No student data collected beyond nickname, answer and timestamp; no email, no account.
 - The `/prof` and `/admin` pages are marked `noindex`, and served with

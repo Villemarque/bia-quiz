@@ -174,19 +174,27 @@ async fn create_room(
     chapters: Vec<ChapterPick>,
     seconds: u32,
 ) -> Result<RoomHandle, String> {
-    let mut merged: BTreeMap<i32, u32> = BTreeMap::new();
+    let mut merged: BTreeMap<(i32, Option<i32>), u32> = BTreeMap::new();
     for pick in chapters {
         if pick.count == 0 {
             continue;
         }
-        if pick.count > 50 {
-            return Err("Le nombre de questions par chapitre doit être entre 1 et 50.".into());
+        if !(0..=5).contains(&pick.subject) {
+            return Err("Matière invalide.".into());
         }
-        let entry = merged.entry(pick.number).or_default();
+        if let Some(chapter) = pick.chapter {
+            if !(0..=14).contains(&chapter) {
+                return Err("Chapitre invalide.".into());
+            }
+        }
+        if pick.count > 50 {
+            return Err("Le nombre de questions par sélection doit être entre 1 et 50.".into());
+        }
+        let entry = merged.entry((pick.subject, pick.chapter)).or_default();
         *entry = entry.saturating_add(pick.count);
     }
     if merged.is_empty() {
-        return Err("Choisissez au moins un chapitre.".into());
+        return Err("Choisissez au moins une sélection.".into());
     }
     let requested: u64 = merged.values().map(|count| u64::from(*count)).sum();
     if requested == 0 || requested > 50 {
@@ -204,15 +212,20 @@ async fn create_room(
         }
     }
 
-    let picks: Vec<(i32, u32)> = merged.into_iter().collect();
-    let draw_picks: Vec<(i32, usize)> = picks
+    let picks: Vec<((i32, Option<i32>), u32)> = merged.into_iter().collect();
+    let draw_picks: Vec<(i32, Option<i32>, usize)> = picks
         .iter()
-        .map(|(number, count)| (*number, *count as usize))
+        .map(|((subject, chapter), count)| (*subject, *chapter, *count as usize))
         .collect();
     let (questions, available) = db::draw(&state.db, &draw_picks)
         .await
         .map_err(|e| e.to_string())?;
-    let chapter_numbers: Vec<i32> = picks.iter().map(|(number, _)| *number).collect();
+    let mut chapter_numbers: Vec<i32> = picks
+        .iter()
+        .filter_map(|((_, chapter), _)| *chapter)
+        .collect();
+    chapter_numbers.sort_unstable();
+    chapter_numbers.dedup();
     let chapter_ids = db::chapter_ids(&state.db, &chapter_numbers)
         .await
         .map_err(|e| e.to_string())?;
@@ -233,7 +246,7 @@ async fn create_room(
     let join_url = state.cfg.join_url(&code);
     let warning = if questions.len() < requested as usize {
         Some(format!(
-            "Seules {} questions ont pu être tirées sur {} demandées ({} disponibles pour ces chapitres).",
+            "Seules {} questions ont pu être tirées sur {} demandées ({} disponibles pour cette sélection).",
             questions.len(),
             requested,
             available

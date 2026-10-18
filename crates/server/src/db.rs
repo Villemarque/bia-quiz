@@ -1,8 +1,9 @@
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, bail, Context, Result};
-use bia_core::draw::draw_per_chapter;
+use bia_core::draw::draw_per_pick;
 use bia_core::models::*;
 use bia_core::schema::*;
 use diesel::connection::SimpleConnection;
@@ -59,18 +60,114 @@ pub fn open_connection(path: &Path) -> Result<SqliteConnection> {
     Ok(conn)
 }
 
-pub async fn chapters(db: &Db) -> Result<Vec<ChapterCount>> {
+const SUBJECTS: [(i32, &str); 6] = [
+    (2, "Aéronefs"),
+    (1, "Mécanique du vol"),
+    (0, "Météo"),
+    (3, "Navigation"),
+    (4, "Histoire"),
+    (5, "Anglais"),
+];
+
+#[derive(Serialize, Clone, Debug)]
+pub struct SubjectCatalog {
+    pub subject: i32,
+    pub title: String,
+    pub question_count: i64,
+    pub chapters: Vec<ChapterCount>,
+    pub no_chapter_count: i64,
+}
+
+#[derive(QueryableByName)]
+struct SubjectChapterRow {
+    #[diesel(sql_type = Integer)]
+    subject: i32,
+    #[diesel(sql_type = Integer)]
+    number: i32,
+    #[diesel(sql_type = Text)]
+    title: String,
+    #[diesel(sql_type = BigInt)]
+    question_count: i64,
+}
+
+#[derive(QueryableByName)]
+struct SubjectCountRow {
+    #[diesel(sql_type = Integer)]
+    subject: i32,
+    #[diesel(sql_type = BigInt)]
+    question_count: i64,
+}
+
+pub async fn chapters(db: &Db) -> Result<Vec<SubjectCatalog>> {
     db.call(|conn| {
-        let rows = diesel::sql_query(
-            "SELECT c.number AS number, c.title AS title, \
+        let chapter_rows: Vec<SubjectChapterRow> = diesel::sql_query(
+            "SELECT q.subject AS subject, c.number AS number, c.title AS title, \
                     COUNT(DISTINCT q.qid) AS question_count \
-             FROM chapters c \
-             LEFT JOIN question_chapters qc ON qc.chapter_id = c.id \
-             LEFT JOIN questions q ON q.qid = qc.question_qid AND q.active = 1 \
-             GROUP BY c.id ORDER BY c.number",
+             FROM questions q \
+             JOIN question_chapters qc ON qc.question_qid = q.qid \
+             JOIN chapters c ON c.id = qc.chapter_id \
+             WHERE q.active = 1 \
+             GROUP BY q.subject, c.number, c.title \
+             ORDER BY q.subject, c.number",
         )
-        .load::<ChapterCount>(conn)?;
-        Ok(rows)
+        .load(conn)?;
+
+        let no_chapter_rows: Vec<SubjectCountRow> = diesel::sql_query(
+            "SELECT q.subject AS subject, COUNT(*) AS question_count \
+             FROM questions q \
+             WHERE q.active = 1 \
+               AND NOT EXISTS (SELECT 1 FROM question_chapters qc \
+                               WHERE qc.question_qid = q.qid) \
+             GROUP BY q.subject",
+        )
+        .load(conn)?;
+
+        let total_rows: Vec<SubjectCountRow> = diesel::sql_query(
+            "SELECT subject, COUNT(*) AS question_count \
+             FROM questions WHERE active = 1 GROUP BY subject",
+        )
+        .load(conn)?;
+
+        let mut by_subject: HashMap<i32, SubjectCatalog> = SUBJECTS
+            .iter()
+            .map(|(number, title)| {
+                (
+                    *number,
+                    SubjectCatalog {
+                        subject: *number,
+                        title: (*title).to_string(),
+                        question_count: 0,
+                        chapters: Vec::new(),
+                        no_chapter_count: 0,
+                    },
+                )
+            })
+            .collect();
+
+        for row in total_rows {
+            if let Some(subject) = by_subject.get_mut(&row.subject) {
+                subject.question_count = row.question_count;
+            }
+        }
+        for row in chapter_rows {
+            if let Some(subject) = by_subject.get_mut(&row.subject) {
+                subject.chapters.push(ChapterCount {
+                    number: row.number,
+                    title: row.title,
+                    question_count: row.question_count,
+                });
+            }
+        }
+        for row in no_chapter_rows {
+            if let Some(subject) = by_subject.get_mut(&row.subject) {
+                subject.no_chapter_count = row.question_count;
+            }
+        }
+
+        Ok(SUBJECTS
+            .iter()
+            .filter_map(|(number, _)| by_subject.remove(number))
+            .collect())
     })
     .await
 }
@@ -85,32 +182,71 @@ pub struct ChapterCount {
     pub question_count: i64,
 }
 
-/// Draw up to each chapter's requested count, never repeating a question that
-/// belongs to several selected chapters. Returns the questions in draw order
-/// plus the number of unique active questions in the selected chapters.
-pub async fn draw(db: &Db, picks: &[(i32, usize)]) -> Result<(Vec<Question>, usize)> {
+#[derive(QueryableByName)]
+struct QuestionChapterRow {
+    #[diesel(sql_type = Text)]
+    qid: String,
+    #[diesel(sql_type = Integer)]
+    subject: i32,
+    #[diesel(sql_type = Nullable<Integer>)]
+    chapter: Option<i32>,
+}
+
+/// Draw up to each pick's requested count, never repeating a question.
+/// A pick is `(subject, chapter or None for no chapter, count)`.
+pub async fn draw(db: &Db, picks: &[(i32, Option<i32>, usize)]) -> Result<(Vec<Question>, usize)> {
     let picks = picks.to_vec();
-    let numbers: Vec<i32> = picks.iter().map(|(number, _)| *number).collect();
     let (ids, available) = db
         .call(move |conn| {
-            let rows = question_chapters::table
-                .inner_join(chapters::table)
-                .inner_join(questions::table)
-                .filter(chapters::number.eq_any(&numbers))
-                .filter(questions::active.eq(true))
-                .select((chapters::number, question_chapters::question_qid))
-                .load::<(i32, String)>(conn)?;
-            let mut unique: Vec<&str> = rows.iter().map(|(_, qid)| qid.as_str()).collect();
-            unique.sort_unstable();
-            unique.dedup();
+            let rows: Vec<QuestionChapterRow> = diesel::sql_query(
+                "SELECT q.qid AS qid, q.subject AS subject, c.number AS chapter \
+                 FROM questions q \
+                 LEFT JOIN question_chapters qc ON qc.question_qid = q.qid \
+                 LEFT JOIN chapters c ON c.id = qc.chapter_id \
+                 WHERE q.active = 1",
+            )
+            .load(conn)?;
+
+            let mut by_qid: HashMap<String, (i32, Vec<i32>)> = HashMap::new();
+            for row in rows {
+                let entry = by_qid
+                    .entry(row.qid)
+                    .or_insert_with(|| (row.subject, Vec::new()));
+                if let Some(chapter) = row.chapter {
+                    entry.1.push(chapter);
+                }
+            }
+
+            let mut candidates: Vec<(usize, String)> = Vec::new();
+            let mut unique = HashSet::new();
+            for (index, (subject, chapter, _)) in picks.iter().enumerate() {
+                for (qid, (question_subject, chapters)) in &by_qid {
+                    if question_subject != subject {
+                        continue;
+                    }
+                    let matched = match chapter {
+                        Some(number) => chapters.contains(number),
+                        None => chapters.is_empty(),
+                    };
+                    if matched {
+                        candidates.push((index, qid.clone()));
+                        unique.insert(qid.clone());
+                    }
+                }
+            }
             let available = unique.len();
-            let chosen = draw_per_chapter(rows, &picks, &mut thread_rng());
+            let quotas: Vec<(usize, usize)> = picks
+                .iter()
+                .enumerate()
+                .map(|(index, (_, _, count))| (index, *count))
+                .collect();
+            let chosen = draw_per_pick(candidates, &quotas, &mut thread_rng());
             Ok((chosen, available))
         })
         .await?;
 
     if ids.is_empty() {
-        bail!("aucune question disponible pour ces chapitres");
+        bail!("aucune question disponible pour cette sélection");
     }
 
     let chosen = ids.clone();

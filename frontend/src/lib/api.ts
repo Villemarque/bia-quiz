@@ -1,4 +1,4 @@
-import type { Chapter } from '$lib/types';
+import type { SubjectCatalog } from '$lib/types';
 
 function redirectToLogin(): void {
   const next = encodeURIComponent(location.pathname + location.search);
@@ -17,8 +17,8 @@ async function json<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function fetchChapters(): Promise<Chapter[]> {
-  return json<Chapter[]>(await fetch('/api/chapters'));
+export async function fetchCatalog(): Promise<SubjectCatalog[]> {
+  return json<SubjectCatalog[]>(await fetch('/api/chapters'));
 }
 
 export interface Meta {

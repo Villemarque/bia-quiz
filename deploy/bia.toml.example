@@ -3,7 +3,7 @@ bind = "127.0.0.1:8080"
 public_base_url = "https://quiz.example.org"
 max_players = 60
 # Public URL of the deployed source (AGPL-3.0 network-use obligation).
-source_url = "https://github.com/your-org/bia-quiz"
+source_url = "https://github.com/Villemarque/bia-quiz"
 
 [db]
 path = "/var/lib/bia-quiz/bia.sqlite3"

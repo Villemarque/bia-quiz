@@ -49,7 +49,16 @@ export interface Chapter {
   question_count: number;
 }
 
+export interface SubjectCatalog {
+  subject: number;
+  title: string;
+  question_count: number;
+  chapters: Chapter[];
+  no_chapter_count: number;
+}
+
 export interface ChapterPick {
-  number: number;
+  subject: number;
+  chapter: number | null;
   count: number;
 }

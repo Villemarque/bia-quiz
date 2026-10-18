@@ -16,7 +16,6 @@
 .env
 
 # Fetched data: the /admin URL import and `make import` download these.
-# Only the chapter seed is source: data/chapters.toml.
 /annales-bia.tsv
 /data/figures/
 
@@ -24,6 +23,11 @@
 # falls back to the system font stack.
 /frontend/static/fonts/
 /charte-graphique.html
+
+# Devenv / direnv
+/.devenv/
+/.direnv/
+/devenv.local.nix
 
 # OS / editor
 .DS_Store

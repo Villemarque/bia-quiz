@@ -1,6 +1,6 @@
 [Unit]
 Description=bia-quiz (live BIA quiz)
-Documentation=https://github.com/your-org/bia-quiz
+Documentation=https://github.com/Villemarque/bia-quiz
 After=network-online.target
 Wants=network-online.target
 
