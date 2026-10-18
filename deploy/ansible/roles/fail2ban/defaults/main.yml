@@ -1,0 +1,7 @@
+---
+bia_enable_fail2ban: true
+bia_ssh_port: 22
+bia_fail2ban_bantime: "1h"
+bia_fail2ban_findtime: "10m"
+bia_fail2ban_maxretry: 5
+bia_fail2ban_ignoreip: "127.0.0.1/8 ::1"

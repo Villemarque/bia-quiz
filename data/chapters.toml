@@ -1,0 +1,75 @@
+# Chapter indices used by the `chapter` column of annales-bia.tsv.
+# Source: README of https://github.com/Villemarque/bia-annales-database-csv
+# The indices do NOT match the `subject` numbers.
+
+[[chapter]]
+number = 0
+title = "1.1 Les aéronefs"
+
+[[chapter]]
+number = 1
+title = "1.2 Instrumentation"
+
+[[chapter]]
+number = 2
+title = "1.3 Moteurs"
+
+[[chapter]]
+number = 3
+title = "2.1 La sustentation de l'aile"
+
+[[chapter]]
+number = 4
+title = "2.2 Le vol stabilisé"
+
+[[chapter]]
+number = 5
+title = "2.3 L'aérostation et le vol spatial"
+
+[[chapter]]
+number = 6
+title = "3.1 L'atmosphère"
+
+[[chapter]]
+number = 7
+title = "3.2 Les masses d'air et les fronts"
+
+[[chapter]]
+number = 8
+title = "3.3 Les nuages"
+
+[[chapter]]
+number = 9
+title = "3.4 Les vents"
+
+[[chapter]]
+number = 10
+title = "3.5 Les phénomènes dangereux"
+
+[[chapter]]
+number = 11
+title = "3.6 L'information météo"
+
+[[chapter]]
+number = 12
+title = "4.1 Réglementation"
+
+[[chapter]]
+number = 13
+title = "4.2 Sécurité des vols (SV) et facteurs humains (FH)"
+
+[[chapter]]
+number = 14
+title = "4.3 Navigation"
+
+[[chapter]]
+number = 15
+title = "Sans chapitre"
+
+[[chapter]]
+number = 16
+title = "Sans chapitre (Histoire)"
+
+[[chapter]]
+number = 17
+title = "Sans chapitre (Anglais)"

@@ -1,0 +1,16 @@
+// Managed by Ansible. See /usr/share/doc/unattended-upgrades/README.md.
+
+// Only Debian stable and Debian security. The Caddy repository is not included.
+Unattended-Upgrade::Origins-Pattern {
+    "origin=Debian,codename=${distro_codename},label=Debian";
+    "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+};
+
+Unattended-Upgrade::Package-Blacklist {
+};
+
+Unattended-Upgrade::Automatic-Reboot "{{ 'true' if bia_unattended_automatic_reboot | bool else 'false' }}";
+Unattended-Upgrade::Automatic-Reboot-Time "{{ bia_unattended_reboot_time }}";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "{{ 'true' if bia_unattended_remove_unused_kernel_packages | bool else 'false' }}";
+Unattended-Upgrade::Remove-New-Unused-Dependencies "{{ 'true' if bia_unattended_remove_new_unused_dependencies | bool else 'false' }}";
+Unattended-Upgrade::SyslogEnable "true";

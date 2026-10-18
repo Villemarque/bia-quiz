@@ -1,0 +1,82 @@
+---
+- name: Validate the Caddy inputs
+  ansible.builtin.assert:
+    that:
+      - bia_domain | length > 0
+      - bia_domain != 'quiz.example.org'
+      - "'://' not in bia_domain"
+      - "'/' not in bia_domain"
+      - bia_app_port | int >= 1
+      - bia_app_port | int <= 65535
+    fail_msg: >-
+      Set bia_domain (public hostname) and bia_app_port (app loopback port) in
+      group_vars/all.yml before enabling Caddy.
+  when: bia_enable_caddy | bool
+
+- name: Install the Caddy repository prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - gnupg
+      - debian-keyring
+      - debian-archive-keyring
+      - apt-transport-https
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: bia_enable_caddy | bool
+
+- name: Download the Caddy signing key
+  ansible.builtin.get_url:
+    url: https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+    dest: /tmp/caddy-stable.gpg.key
+    mode: "0644"
+  when: bia_enable_caddy | bool
+
+- name: Install the Caddy signing key
+  ansible.builtin.command:
+    cmd: >-
+      gpg --dearmor --yes -o
+      /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+      /tmp/caddy-stable.gpg.key
+    creates: /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  when: bia_enable_caddy | bool
+
+- name: Add the Caddy apt repository
+  ansible.builtin.get_url:
+    url: https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt
+    dest: /etc/apt/sources.list.d/caddy-stable.list
+    mode: "0644"
+  register: bia_caddy_repo
+  when: bia_enable_caddy | bool
+
+- name: Install Caddy
+  ansible.builtin.apt:
+    name: caddy
+    state: present
+    update_cache: "{{ bia_caddy_repo.changed | default(true) }}"
+    cache_valid_time: 3600
+  when: bia_enable_caddy | bool
+
+- name: Write the Caddyfile
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    owner: root
+    group: root
+    mode: "0644"
+  when: bia_enable_caddy | bool
+  notify: Reload Caddy
+
+- name: Enable and start Caddy
+  ansible.builtin.systemd:
+    name: caddy
+    enabled: true
+    state: started
+  when: bia_enable_caddy | bool
+
+- name: Remove the temporary Caddy key
+  ansible.builtin.file:
+    path: /tmp/caddy-stable.gpg.key
+    state: absent
+  when: bia_enable_caddy | bool

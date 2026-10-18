@@ -1,0 +1,29 @@
+bia-quiz
+=======
+
+Copyright (C) 2026 the bia-quiz contributors.
+
+The source code of this project is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, version 3 of the License. See LICENSE.
+
+If you run a modified version of this software as a network service, the AGPL requires
+you to offer the corresponding source to its users. Set `server.source_url` in
+`bia.toml` so the landing page links to it.
+
+Content notice
+--------------
+
+The question bank and the figures are NOT covered by the AGPL grant on the code:
+
+- `annales-bia.tsv`
+- `data/figures/*.jpeg`
+
+They are reproduced from the upstream repository
+<https://github.com/Villemarque/bia-annales-database-csv> (path
+`site/static/annales-bia.tsv` and `site/static/img-sujets/`), byte-for-byte, for
+educational use. The upstream project defines their origin, authorship and terms; this
+project grants no additional rights over them. If you redistribute or deploy this
+content, verify the upstream terms and any rights held by the exam authors.
+
+The chapter taxonomy in `data/chapters.toml` is derived from the upstream README.

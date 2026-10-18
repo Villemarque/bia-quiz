@@ -1,0 +1,3 @@
+collections:
+  - name: community.general   # ufw
+  - name: ansible.posix       # authorized_key

@@ -1,0 +1,13 @@
+---
+# Users managed on the host. The default is the unprivileged service account.
+# Add SSH/admin users here (see group_vars/all.yml.example).
+bia_users:
+  - name: bia-quiz
+    system: true
+    group: bia-quiz
+    home: /var/lib/bia-quiz
+    shell: /usr/sbin/nologin
+    create_home: true
+    home_mode: "0750"
+    ssh_authorized_keys: []
+    sudo: false

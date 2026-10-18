@@ -1,0 +1,27 @@
+[server]
+bind = "127.0.0.1:8080"
+public_base_url = "https://quiz.example.org"
+max_players = 60
+# Public URL of the deployed source (AGPL-3.0 network-use obligation).
+source_url = "https://github.com/your-org/bia-quiz"
+
+[db]
+path = "/var/lib/bia-quiz/bia.sqlite3"
+
+[auth]
+session_hours = 12
+
+[prof]
+user = "prof"
+# Plaintext in this root-only file, hashed at startup. Prefer env secrets in production.
+password = "change-me"
+
+[admin]
+user = "admin"
+password = "change-me-too"
+
+[import]
+upstream_url = "https://github.com/Villemarque/bia-annales-database-csv/archive/refs/heads/master.tar.gz"
+
+[limits]
+requests_per_ip_per_minute = 240

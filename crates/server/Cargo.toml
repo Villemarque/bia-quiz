@@ -1,0 +1,39 @@
+[package]
+name = "bia-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "bia-quiz"
+path = "src/main.rs"
+
+[dependencies]
+bia-core = { path = "../core" }
+bia-importer = { path = "../importer" }
+anyhow = { workspace = true }
+axum = { workspace = true }
+time = { workspace = true }
+argon2 = { workspace = true }
+tower-sessions = { workspace = true }
+axum-login = { workspace = true }
+csv = { workspace = true }
+diesel = { workspace = true, features = ["sqlite"] }
+diesel_migrations = { workspace = true }
+libsqlite3-sys = { workspace = true }
+futures-util = { workspace = true }
+mime_guess = { workspace = true }
+rand = { workspace = true }
+rust-embed = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tempfile = "3"
+
+[dev-dependencies]
+tokio-tungstenite = "0.28"

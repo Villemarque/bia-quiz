@@ -1,0 +1,55 @@
+# Copy this file to group_vars/all.yml and edit it. Do not commit that file.
+
+# Users managed on the host. The default is the application service account.
+bia_users:
+  - name: bia-quiz
+    system: true
+    group: bia-quiz
+    home: /var/lib/bia-quiz
+    shell: /usr/sbin/nologin
+    create_home: true
+    home_mode: "0750"
+    ssh_authorized_keys: []
+    sudo: false
+
+  # An SSH admin user. Uncomment, set your key(s), and keep another way in.
+  # Keys are added, never removed, and existing keys are left alone.
+  # - name: deploy
+  #   system: false
+  #   group: deploy
+  #   home: /home/deploy
+  #   shell: /bin/bash
+  #   create_home: true
+  #   home_mode: "0700"
+  #   # groups: [adm]
+  #   # append: true
+  #   ssh_authorized_keys:
+  #     - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... you@laptop"
+  #   sudo: true          # writes /etc/sudoers.d/deploy with NOPASSWD:ALL
+
+# Caddy. bia_domain must be a real public hostname whose DNS points at this server.
+bia_enable_caddy: true
+bia_domain: quiz.example.org
+bia_app_port: 8080
+
+# Debian security updates. Automatic reboot is off; reboot when convenient.
+bia_enable_unattended_upgrades: true
+bia_unattended_automatic_reboot: false
+bia_unattended_reboot_time: "03:30"
+bia_unattended_remove_unused_kernel_packages: true
+bia_unattended_remove_new_unused_dependencies: false
+
+# SSH brute-force protection (fail2ban sshd jail).
+bia_enable_fail2ban: true
+bia_fail2ban_bantime: "1h"
+bia_fail2ban_findtime: "10m"
+bia_fail2ban_maxretry: 5
+bia_fail2ban_ignoreip: "127.0.0.1/8 ::1"
+
+# Firewall. Keep the SSH port in this list or you will lock yourself out.
+bia_ssh_port: 22
+bia_enable_ufw: true
+bia_ufw_allowed_tcp_ports:
+  - "{{ bia_ssh_port }}"
+  - 80
+  - 443

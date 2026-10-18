@@ -1,0 +1,11 @@
+# Managed by Ansible.
+[DEFAULT]
+bantime = {{ bia_fail2ban_bantime }}
+findtime = {{ bia_fail2ban_findtime }}
+maxretry = {{ bia_fail2ban_maxretry }}
+backend = systemd
+ignoreip = {{ bia_fail2ban_ignoreip }}
+
+[sshd]
+enabled = true
+port = {{ bia_ssh_port }}

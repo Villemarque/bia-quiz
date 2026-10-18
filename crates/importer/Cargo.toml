@@ -1,0 +1,29 @@
+[package]
+name = "bia-importer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "bia_importer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bia-import"
+path = "src/main.rs"
+
+[dependencies]
+bia-core = { path = "../core" }
+anyhow = { workspace = true }
+clap = { workspace = true }
+csv = { workspace = true }
+flate2 = "1"
+tar = "0.4"
+tempfile = "3"
+ureq = "2"
+diesel = { workspace = true, features = ["sqlite"] }
+diesel_migrations = { workspace = true }
+libsqlite3-sys = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+

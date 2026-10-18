@@ -1,0 +1,34 @@
+---
+- name: Validate the firewall inputs
+  ansible.builtin.assert:
+    that:
+      - bia_ssh_port | int >= 1
+      - bia_ssh_port | int <= 65535
+      - (bia_ssh_port | int) in (bia_ufw_allowed_tcp_ports | map('int') | list)
+    fail_msg: >-
+      bia_ssh_port must be 1-65535 and present in bia_ufw_allowed_tcp_ports;
+      otherwise enabling UFW locks out SSH.
+  when: bia_enable_ufw | bool
+
+- name: Install UFW
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: bia_enable_ufw | bool
+
+- name: Allow TCP ports through UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ bia_ufw_allowed_tcp_ports | unique }}"
+  when: bia_enable_ufw | bool
+
+- name: Enable UFW with a default deny for incoming traffic
+  community.general.ufw:
+    state: enabled
+    default: deny
+    direction: incoming
+  when: bia_enable_ufw | bool
