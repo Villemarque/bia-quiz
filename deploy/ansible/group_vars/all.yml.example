@@ -26,7 +26,7 @@ bia_users:
 
 # Caddy. bia_domain must be a real public hostname whose DNS points at this server.
 bia_enable_caddy: true
-bia_domain: quiz.example.org
+bia_domain: quiz.asso-triple-a.org
 bia_app_port: 8080
 
 # Debian security updates. Reboot automatically at 03:30 when required.

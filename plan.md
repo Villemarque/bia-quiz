@@ -906,7 +906,7 @@ no Docker, no asset folder required at runtime.
 ```toml
 [server]
 bind = "127.0.0.1:8080"
-public_base_url = "https://quiz.example.org"   # used to build the join URL / QR
+public_base_url = "https://quiz.asso-triple-a.org"   # used to build the join URL / QR
 max_players = 60
 
 [db]
@@ -946,7 +946,7 @@ Caddy can use the same contract. The app listens on `127.0.0.1:8080` and exposes
 Sample `deploy/Caddyfile`:
 
 ```caddy
-quiz.example.org {
+quiz.asso-triple-a.org {
     encode gzip
     reverse_proxy 127.0.0.1:8080
 }

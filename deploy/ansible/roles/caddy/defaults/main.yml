@@ -1,6 +1,6 @@
 ---
 bia_enable_caddy: true
 # Public hostname served by Caddy; replace the example before running.
-bia_domain: quiz.example.org
+bia_domain: quiz.asso-triple-a.org
 # The app's loopback port (matches [server].bind in bia.toml).
 bia_app_port: 8080

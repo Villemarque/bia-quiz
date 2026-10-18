@@ -39,7 +39,7 @@ Recommended: **Debian 13 (trixie)** or **Debian 12 (bookworm)**, 1 vCPU, 1 GB RA
 10 GB disk, public IPv4 (IPv6 optional). Any provider works (Hetzner, Scaleway, OVH,
 DigitalOcean, Fly…).
 
-Before creating it, decide the hostname, e.g. `quiz.example.org`.
+Before creating it, decide the hostname, e.g. `quiz.asso-triple-a.org`.
 
 ```sh
 # as root / first user
@@ -59,8 +59,8 @@ Ansible in §2.5; root/password authentication hardening is still manual.
 Create the DNS record **before** starting Caddy:
 
 ```
-A     quiz.example.org   →  <server IPv4>
-AAAA  quiz.example.org   →  <server IPv6>   (optional)
+A     quiz.asso-triple-a.org   →  <server IPv4>
+AAAA  quiz.asso-triple-a.org   →  <server IPv6>   (optional)
 ```
 
 The host firewall is configured by Ansible in §2.5: SSH, 80 and 443 allowed, with a
@@ -68,7 +68,7 @@ default-deny incoming policy. Open the same ports in the provider's security gro
 Caddy is installed by the same run and needs DNS to be live before it can obtain the
 certificate.
 
-Verify: `dig +short quiz.example.org` returns the server IP. If you use Cloudflare, set
+Verify: `dig +short quiz.asso-triple-a.org` returns the server IP. If you use Cloudflare, set
 the record to **DNS only** until the certificate is issued (or use an origin certificate).
 
 ## 2.5 Host preparation (Ansible): users, firewall, Caddy, upgrades and fail2ban
@@ -131,7 +131,7 @@ keys from the controller at `~/.ssh/bia-quiz.pub` and
 `~/.ssh/bia-quiz-deploy.pub`; create those keys or change the paths. No key material is
 pasted into group vars. `deploy` has `sudo: true` for passwordless sudo. Set `bia_domain`
 to the public hostname and `bia_app_port` to `8080` (it must match `[server].bind` in
-`bia.toml`); the Caddy role refuses the example domain. If SSH is not on 22, set
+`bia.toml`). If SSH is not on 22, set
 `bia_ssh_port`; the default allowed list follows it (or set
 `bia_ufw_allowed_tcp_ports` explicitly). The `sshd` role comments the active `Port` line,
 writes a drop-in config, validates it and restarts SSH. Set `ansible_port` in
@@ -193,7 +193,7 @@ rm -rf /tmp/bia-quiz-deploy && mkdir -p /tmp/bia-quiz-deploy
 cp target/release/bia-quiz target/release/bia-import /tmp/bia-quiz-deploy/
 cp deploy/bia-quiz.service deploy/bia.toml.example /tmp/bia-quiz-deploy/
 tar -czf bia-quiz-deploy.tgz -C /tmp/bia-quiz-deploy .
-scp -P <bia_ssh_port> bia-quiz-deploy.tgz deploy@quiz.example.org:/tmp/
+scp -P <bia_ssh_port> bia-quiz-deploy.tgz deploy@quiz.asso-triple-a.org:/tmp/
 ```
 
 On the server:
@@ -254,7 +254,7 @@ sudo -u bia-quiz test -w /var/lib/bia-quiz && echo "state writable"
 ```toml
 [server]
 bind = "127.0.0.1:8080"
-public_base_url = "https://quiz.example.org"   # QR codes + secure cookies
+public_base_url = "https://quiz.asso-triple-a.org"   # QR codes + secure cookies
 source_url = "https://github.com/Villemarque/bia-quiz"  # AGPL network-use obligation
 
 [db]
@@ -363,13 +363,13 @@ curl -I https://<bia_domain>/
 ## 8. Post-deploy checklist
 
 ```sh
-curl -fsS https://quiz.example.org/healthz                 # ok
-curl -sI https://quiz.example.org/ | head -1                # 200
+curl -fsS https://quiz.asso-triple-a.org/healthz                 # ok
+curl -sI https://quiz.asso-triple-a.org/ | head -1                # 200
 curl -s -o /tmp/f.jpeg -w '%{http_code} %{content_type}\n' \
-  https://quiz.example.org/figures/2015-000.jpeg            # 200 image/jpeg
-curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://quiz.example.org/prof
+  https://quiz.asso-triple-a.org/figures/2015-000.jpeg            # 200 image/jpeg
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://quiz.asso-triple-a.org/prof
 # 303 to /login without a session; 200 in a logged-in browser
-curl -s https://quiz.example.org/api/chapters | head -c 120 # subject + chapter catalog
+curl -s https://quiz.asso-triple-a.org/api/chapters | head -c 120 # subject + chapter catalog
 ```
 
 In a browser:
@@ -379,7 +379,7 @@ In a browser:
 2. Phone on **cellular** (not the LAN) → scan the QR, join, answer.
 3. `/login` → prof account → `/prof` shows the session and the CSV export.
 4. `/login` → admin account → `/admin` shows stats and can import.
-5. Confirm the QR points at `https://quiz.example.org/j/…`, not `localhost`.
+5. Confirm the QR points at `https://quiz.asso-triple-a.org/j/…`, not `localhost`.
 
 ## 9. Backups
 

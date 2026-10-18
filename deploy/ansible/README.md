@@ -57,8 +57,7 @@ for passwords unless `-k` (SSH) or `-K` (sudo) is passed.
 
 Create the DNS `A`/`AAAA` record for `bia_domain` **before** running the playbook. Caddy
 can only issue its certificate once the name resolves to the server and ports 80/443 are
-reachable. Keep `bia_domain = quiz.example.org` only as a placeholder; the Caddy role
-refuses to run with it.
+reachable. The example uses `quiz.asso-triple-a.org`; change it if your hostname differs.
 
 ## What it does
 
@@ -192,7 +191,7 @@ bia_ufw_allowed_tcp_ports:
 
 ```yaml
 bia_enable_caddy: true
-bia_domain: quiz.example.org   # replace with the real public hostname
+bia_domain: quiz.asso-triple-a.org   # public hostname
 bia_app_port: 8080             # must match [server].bind in bia.toml
 ```
 
@@ -206,7 +205,7 @@ bia_app_port: 8080             # must match [server].bind in bia.toml
   ```
 - Caddy handles the WebSocket upgrade, HTTP→HTTPS redirect and certificate renewal.
 - Set `bia_enable_caddy: false` if Caddy is managed elsewhere.
-- The role fails fast if `bia_domain` is still the example or `bia_app_port` is invalid.
+- The role fails fast if `bia_domain` is empty or `bia_app_port` is invalid.
 - Rate limiting stays in the application, not in Caddy.
 
 ## Unattended upgrades
