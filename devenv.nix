@@ -10,6 +10,7 @@
     pkg-config
     gcc
     gnumake
+    zig
 
     # SPA
     nodejs_22

@@ -12,7 +12,7 @@ RELEASE_DIR := $(TARGET_DIR)$(if $(TARGET_TRIPLE),/$(TARGET_TRIPLE),)/release
 BIN         := $(RELEASE_DIR)/bia-quiz
 IMPORT_BIN  := $(RELEASE_DIR)/bia-import
 
-.PHONY: all build frontend import run test check clean distclean doctor uname
+.PHONY: all build cross frontend import run test check clean distclean doctor uname
 
 all: build
 
@@ -23,6 +23,28 @@ frontend:
 # The release binary embeds frontend/dist at compile time; figures live in SQLite.
 build: frontend
 	cargo build --release
+
+# Host-independent Linux x86_64 release build (works from macOS or aarch64 Linux).
+# Requires: rustup target add x86_64-unknown-linux-gnu
+#           cargo install cargo-zigbuild
+#           Zig in PATH (brew install zig, or your package manager)
+# The default glibc is older than Debian 12/13 so the binary runs on both.
+CROSS_TARGET ?= x86_64-unknown-linux-gnu
+CROSS_GLIBC  ?= 2.36
+CROSS_DIR    := $(TARGET_DIR)/$(CROSS_TARGET)/release
+CROSS_BIN    := $(CROSS_DIR)/bia-quiz
+CROSS_IMPORT := $(CROSS_DIR)/bia-import
+
+cross: frontend
+	@command -v cargo-zigbuild >/dev/null 2>&1 || { \
+		echo "cargo-zigbuild is missing: cargo install cargo-zigbuild" >&2; exit 1; }
+	@command -v zig >/dev/null 2>&1 || { \
+		echo "zig is missing: install Zig (e.g. brew install zig)" >&2; exit 1; }
+	cargo zigbuild --release --target $(CROSS_TARGET).$(CROSS_GLIBC) \
+		-p bia-server --bin bia-quiz
+	cargo zigbuild --release --target $(CROSS_TARGET).$(CROSS_GLIBC) \
+		-p bia-importer --bin bia-import
+	file $(CROSS_BIN) $(CROSS_IMPORT)
 
 # Canonical data lives upstream (plan.md §10). The importer downloads the TSV and
 # figures (Rust HTTP + tar/gzip), then loads SQLite.
@@ -65,6 +87,7 @@ doctor:
 	@echo "release dir        : $(RELEASE_DIR)"
 	@echo "server binary      : $(BIN)"
 	@echo "importer binary    : $(IMPORT_BIN)"
+	@echo "cross binary       : $(CROSS_BIN)"
 	@echo "frontend build     : $$(test -f $(FRONTEND)/dist/index.html && echo present || echo missing)"
 	@echo "figures            : $$(ls data/figures 2>/dev/null | wc -l | tr -d ' ') files"
 	@if [ -x "$(BIN)" ]; then \

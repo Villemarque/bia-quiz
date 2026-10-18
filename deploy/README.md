@@ -180,29 +180,37 @@ the backup directory.
 
 ## 3. Build the binaries
 
-The binary must match the server architecture. On the server: `uname -m`. On the build
-machine: `file target/release/bia-quiz`.
+The target server is Linux x86_64 (`uname -m`). `make cross` builds that target; on the
+controller verify with `file target/x86_64-unknown-linux-gnu/release/bia-quiz`.
 
 ### Build and upload
 
-Build on the controller (or CI) for the target architecture. On the build machine
-(Rust 1.86+, Node 20+, pnpm):
+Build **Linux x86_64** on the controller regardless of its host OS/CPU:
 
 ```sh
-make build
-file target/release/bia-quiz     # e.g. "ELF 64-bit ... x86-64" / "ARM aarch64"
-uname -m                         # on the server: x86_64 / aarch64
+make cross
+file target/x86_64-unknown-linux-gnu/release/bia-quiz
 ```
 
-If the architectures differ, rebuild for the target (or use a matching CI runner). A
-Linux `aarch64` binary will not run on `x86_64`, and a macOS binary will not run on
-Linux.
+`make cross` uses `cargo-zigbuild` and Zig, with glibc `2.36` by default (works on
+Debian 12 and 13). Prerequisites on the controller:
+
+```sh
+rustup target add x86_64-unknown-linux-gnu
+cargo install cargo-zigbuild
+# Zig: brew install zig, or your package manager
+```
+
+Override the glibc floor if needed with `make cross CROSS_GLIBC=2.41`. If the controller
+is already x86_64 Linux, plain `make build` also works; a macOS/aarch64 `make build`
+will not.
 
 Create a release bundle (binaries + deploy files):
 
 ```sh
 rm -rf /tmp/bia-quiz-deploy && mkdir -p /tmp/bia-quiz-deploy
-cp target/release/bia-quiz target/release/bia-import /tmp/bia-quiz-deploy/
+cp target/x86_64-unknown-linux-gnu/release/bia-quiz \
+   target/x86_64-unknown-linux-gnu/release/bia-import /tmp/bia-quiz-deploy/
 cp deploy/bia-quiz.service deploy/bia.toml.example /tmp/bia-quiz-deploy/
 tar -czf bia-quiz-deploy.tgz -C /tmp/bia-quiz-deploy .
 scp -P <bia_ssh_port> bia-quiz-deploy.tgz deploy@quiz.asso-triple-a.org:/tmp/

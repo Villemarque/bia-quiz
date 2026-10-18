@@ -69,7 +69,8 @@ and `/healthz` to the backend. The shell also exposes `test`, `check`, `fmt`, `l
 
 | Target | What it does |
 |---|---|
-| `make build` | build the SPA, then the release binary (embeds `frontend/dist`) |
+| `make build` | build the SPA, then the native release binary (embeds `frontend/dist`) |
+| `make cross` | cross-compile Linux **x86_64** with Zig (works from macOS/aarch64) |
 | `make run` | build, then run on `127.0.0.1:8080` with `BIA_QUIZ_PROF_PASSWORD` and `BIA_QUIZ_ADMIN_PASSWORD` (both `dev` by default) |
 | `make import` | build, download the upstream TSV + figures, then (re)import into `bia.sqlite3` |
 | `make test` | `cargo test --workspace` + `svelte-check` |
