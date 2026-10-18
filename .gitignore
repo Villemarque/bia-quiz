@@ -29,6 +29,15 @@
 /.direnv/
 /devenv.local.nix
 
+# Local Ansible copies; only *.example files are committed.
+/deploy/ansible/inventory*.yml
+!/deploy/ansible/inventory.example.yml
+/deploy/ansible/group_vars/*.yml
+!/deploy/ansible/group_vars/*.yml.example
+/deploy/ansible/host_vars/*.yml
+/deploy/ansible/host_vars/*.yml.example
+/deploy/ansible/*.local.yml
+
 # OS / editor
 .DS_Store
 .idea/
