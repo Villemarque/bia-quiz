@@ -163,14 +163,19 @@ bia_ssh_port: 22
 bia_ssh_password_authentication: false
 ```
 
-- The role comments active `Port` lines in `/etc/ssh/sshd_config` and writes
-  `/etc/ssh/sshd_config.d/99-bia-quiz-port.conf`.
+- The role comments active `Port` and password-auth lines in `/etc/ssh/sshd_config`
+  and writes `/etc/ssh/sshd_config.d/00-bia-quiz.conf`.
+- The `00-` prefix matters: cloud images often ship
+  `/etc/ssh/sshd_config.d/50-cloud-init.conf` with `PasswordAuthentication yes`.
+  OpenSSH uses the first value, so a later `99-` drop-in would lose.
 - It enables public-key authentication, disables `PasswordAuthentication` and
   `KbdInteractiveAuthentication`, validates the effective config with `sshd -T`, then
   restarts SSH.
 - Password login is disabled by default. Verify key login before closing the current
   session; keep a console available until then.
 - UFW and the fail2ban jail use the same `bia_ssh_port`.
+- While changing ports, UFW also keeps `bia_ssh_previous_port` (default `22`) open.
+  Remove that rule after verifying the new port.
 - **After changing the port**, set `ansible_port` to the same value in
   `inventory.yml` for later runs and use `ssh -p <port>` / `scp -P <port>`.
 - The current Ansible connection survives the restart; keep a console session open until

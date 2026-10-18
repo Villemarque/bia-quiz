@@ -135,9 +135,11 @@ keys from the controller at `~/.ssh/bia-quiz.pub` and
 pasted into group vars. `deploy` has `sudo: true` for passwordless sudo. Set `bia_domain`
 to the public hostname and `bia_app_port` to `8080` (it must match `[server].bind` in
 `bia.toml`). If SSH is not on 22, set
-`bia_ssh_port`; the default allowed list follows it (or set
-`bia_ufw_allowed_tcp_ports` explicitly). The `sshd` role comments the active `Port` line,
-writes a drop-in config, validates it and restarts SSH. Set `ansible_port` in
+`bia_ssh_port`; the default allowed list follows it. The `sshd` role comments the active
+`Port` and password-auth lines, writes `/etc/ssh/sshd_config.d/00-bia-quiz.conf`,
+disables password authentication, validates the effective config and restarts SSH.
+`bia_ssh_previous_port` (default `22`) stays allowed in UFW during the change; remove it
+after verifying the new port. Set `ansible_port` in
 `inventory.yml` to the same value for subsequent runs. The firewall preflight refuses to
 enable UFW if `bia_ssh_port` is missing from the allowed list. Set `bia_enable_ufw: false` only if the
 provider firewall already handles this, and `bia_enable_caddy: false` only if Caddy is

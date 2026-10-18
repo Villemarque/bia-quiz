@@ -46,11 +46,13 @@ bia_fail2ban_ignoreip: "127.0.0.1/8 ::1"
 # SSH daemon port and firewall. Keep ansible_port in inventory.yml in sync after
 # changing this value.
 bia_manage_ssh_port: true
-bia_ssh_port: 22
+bia_ssh_port: 22221
 # Key-only SSH. Keep false unless you explicitly need password login.
 bia_ssh_password_authentication: false
 bia_enable_ufw: true
+bia_ssh_previous_port: 22
 bia_ufw_allowed_tcp_ports:
   - "{{ bia_ssh_port }}"
+  - "{{ bia_ssh_previous_port }}"
   - 80
   - 443

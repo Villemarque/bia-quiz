@@ -7,6 +7,13 @@
     fail_msg: "bia_ssh_port must be between 1 and 65535."
   when: bia_manage_ssh_port | bool
 
+- name: Remove the legacy SSH drop-in
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/99-bia-quiz-port.conf
+    state: absent
+  when: bia_manage_ssh_port | bool
+  notify: Restart SSH
+
 - name: Comment active Port directives in sshd_config
   ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
@@ -16,10 +23,19 @@
   when: bia_manage_ssh_port | bool
   notify: Restart SSH
 
-- name: Configure the SSH port
+- name: Comment active password-auth directives in sshd_config
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^(\s*(?:PasswordAuthentication|KbdInteractiveAuthentication|ChallengeResponseAuthentication)\s+.*)$'
+    line: '# \1'
+    backrefs: true
+  when: bia_manage_ssh_port | bool
+  notify: Restart SSH
+
+- name: Configure the SSH daemon
   ansible.builtin.template:
     src: port.conf.j2
-    dest: /etc/ssh/sshd_config.d/99-bia-quiz-port.conf
+    dest: /etc/ssh/sshd_config.d/00-bia-quiz.conf
     owner: root
     group: root
     mode: "0644"

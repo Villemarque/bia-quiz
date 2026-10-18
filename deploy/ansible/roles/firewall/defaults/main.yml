@@ -1,8 +1,11 @@
 ---
 # Firewall. Keep the SSH port in the allowed list, or you will lock yourself out.
 bia_ssh_port: 22
+# Old SSH port kept open while changing ports. Remove it manually after verifying.
+bia_ssh_previous_port: 22
 bia_enable_ufw: true
 bia_ufw_allowed_tcp_ports:
   - "{{ bia_ssh_port }}"
+  - "{{ bia_ssh_previous_port }}"
   - 80
   - 443
