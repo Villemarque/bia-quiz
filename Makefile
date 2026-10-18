@@ -35,6 +35,7 @@ CROSS_DIR    := $(TARGET_DIR)/$(CROSS_TARGET)/release
 CROSS_BIN    := $(CROSS_DIR)/bia-quiz
 CROSS_IMPORT := $(CROSS_DIR)/bia-import
 ARTEFACT_DIR := deploy/artefacts
+APP_CONFIG   ?= deploy/bia.toml
 
 artefacts: frontend
 	@command -v cargo-zigbuild >/dev/null 2>&1 || { \
@@ -50,14 +51,17 @@ artefacts: frontend
 	cp $(CROSS_IMPORT) $(ARTEFACT_DIR)/bia-import
 	cp deploy/bia-quiz.service $(ARTEFACT_DIR)/bia-quiz.service
 	cp deploy/bia.toml.example $(ARTEFACT_DIR)/bia.toml.example
+	@if [ -f "$(APP_CONFIG)" ]; then \
+		cp "$(APP_CONFIG)" $(ARTEFACT_DIR)/bia.toml; \
+		chmod 0600 $(ARTEFACT_DIR)/bia.toml; \
+		echo "staged real config from $(APP_CONFIG)"; \
+	elif [ ! -f $(ARTEFACT_DIR)/bia.toml ]; then \
+		echo "no real config staged; create deploy/bia.toml or $(ARTEFACT_DIR)/bia.toml"; \
+	fi
 	chmod 0755 $(ARTEFACT_DIR)/bia-quiz $(ARTEFACT_DIR)/bia-import
 	chmod 0644 $(ARTEFACT_DIR)/bia-quiz.service $(ARTEFACT_DIR)/bia.toml.example
 	file $(ARTEFACT_DIR)/bia-quiz $(ARTEFACT_DIR)/bia-import
 	@echo "artefacts staged in $(ARTEFACT_DIR)/"
-
-# Compatibility aliases for the previous target name.
-build-artefact: artefacts
-cross: artefacts
 
 # Canonical data lives upstream (plan.md §10). The importer downloads the TSV and
 # figures (Rust HTTP + tar/gzip), then loads SQLite.

@@ -195,7 +195,18 @@ file deploy/artefacts/bia-quiz
 `make artefacts` cross-compiles with `cargo-zigbuild` and Zig, then stages
 `bia-quiz`, `bia-import`, `bia-quiz.service` and `bia.toml.example` in the gitignored
 `deploy/artefacts/` directory. The glibc floor is `2.36` by default (works on Debian 12
-and 13). Prerequisites on the controller:
+and 13).
+
+Put your real config in `deploy/bia.toml` (gitignored) before running the target; it is
+copied to `deploy/artefacts/bia.toml` and then installed by the Ansible `app` role:
+
+```sh
+cp deploy/bia.toml.example deploy/bia.toml
+$EDITOR deploy/bia.toml
+```
+
+You can override the source with `make artefacts APP_CONFIG=/path/to/bia.toml`.
+Prerequisites on the controller:
 
 ```sh
 rustup target add x86_64-unknown-linux-gnu
