@@ -87,9 +87,10 @@ reachable. The example uses `quiz.asso-triple-a.org`; change it if your hostname
   and enables `apt-daily.timer` / `apt-daily-upgrade.timer`.
 - Installs `fail2ban`, enables the `sshd` jail on `bia_ssh_port`, and starts the service.
 - Installs the `bia-quiz` systemd unit and starts the service once the binary and
-  `/etc/bia-quiz/bia.toml` exist. `make artefacts` stages the binaries/unit in
-  `deploy/artefacts/`; the role copies them. A staged `deploy/artefacts/bia.toml` is
-  installed if present, but the role never templates secrets itself.
+  `/etc/bia-quiz/bia.toml` exist. `make artefacts` stages the binaries in
+  `deploy/artefacts/`; the unit is read from `deploy/bia-quiz.service`. A staged
+  `deploy/artefacts/bia.toml` is installed if present, but the role never templates
+  secrets itself.
 
 It does **not**: create `/etc/bia-quiz/bia.toml`, import the question bank, configure
 DNS, open ports in a cloud provider firewall, change root login, or remove SSH keys.
@@ -275,9 +276,11 @@ bia_fail2ban_ignoreip: "127.0.0.1/8 ::1"
 bia_app_copy_binary: true
 ```
 
-- `make artefacts` stages `bia-quiz`, `bia-import`, `bia-quiz.service` and
-  `bia.toml.example` in the gitignored `deploy/artefacts/` directory.
-- The role copies the binaries and unit from `deploy/artefacts/`.
+- `make artefacts` stages `bia-quiz`, `bia-import` and `bia.toml.example` in the
+  gitignored `deploy/artefacts/` directory. The systemd unit stays in
+  `deploy/bia-quiz.service`.
+- The role copies the binaries from `deploy/artefacts/` and the unit from
+  `deploy/bia-quiz.service`.
 - It also installs `deploy/artefacts/bia.toml` if that optional file exists; otherwise
   `/etc/bia-quiz/bia.toml` must already be present. The config contains passwords, so
   it is never committed or templated with secrets by this role.
@@ -345,10 +348,10 @@ Installed by `ansible-galaxy collection install -r requirements.yml`.
 ## App deployment
 
 Continue with [`README.md`](../README.md) §4. On the controller run `make artefacts`;
-the `app` role copies the binaries and unit from `deploy/artefacts/`. Put the real
-config at `deploy/bia.toml` (gitignored) before `make artefacts`, or place it directly
-at `deploy/artefacts/bia.toml`. The role installs it if present; otherwise deploy
-`/etc/bia-quiz/bia.toml` manually.
+the `app` role copies the binaries from `deploy/artefacts/` and the unit directly from
+`deploy/bia-quiz.service`. Put the real config at `deploy/bia.toml` (gitignored) before
+`make artefacts`, or place it directly at `deploy/artefacts/bia.toml`. The role installs
+it if present; otherwise deploy `/etc/bia-quiz/bia.toml` manually.
 
 ```sh
 ansible-playbook site.yml --tags app

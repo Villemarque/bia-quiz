@@ -193,9 +193,9 @@ file deploy/artefacts/bia-quiz
 ```
 
 `make artefacts` cross-compiles with `cargo-zigbuild` and Zig, then stages
-`bia-quiz`, `bia-import`, `bia-quiz.service` and `bia.toml.example` in the gitignored
-`deploy/artefacts/` directory. The glibc floor is `2.36` by default (works on Debian 12
-and 13).
+`bia-quiz`, `bia-import` and `bia.toml.example` in the gitignored `deploy/artefacts/`
+directory. The systemd unit stays in `deploy/bia-quiz.service` and is copied from
+there. The glibc floor is `2.36` by default (works on Debian 12 and 13).
 
 Put your real config in `deploy/bia.toml` (gitignored) before running the target; it is
 copied to `deploy/artefacts/bia.toml` and then installed by the Ansible `app` role:
@@ -223,7 +223,10 @@ For the Ansible path, the `app` role copies the staged files directly from
 bundle from the same directory:
 
 ```sh
-tar -czf bia-quiz-deploy.tgz -C deploy/artefacts .
+rm -rf /tmp/bia-quiz-deploy
+cp -a deploy/artefacts /tmp/bia-quiz-deploy
+cp deploy/bia-quiz.service /tmp/bia-quiz-deploy/
+tar -czf bia-quiz-deploy.tgz -C /tmp/bia-quiz-deploy .
 scp -P <bia_ssh_port> bia-quiz-deploy.tgz deploy@quiz.asso-triple-a.org:/tmp/
 ```
 

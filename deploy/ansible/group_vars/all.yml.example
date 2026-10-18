@@ -30,8 +30,8 @@ bia_domain: quiz.asso-triple-a.org
 bia_app_port: 8080
 
 
-# Application service. `make artefacts` stages binaries/unit in deploy/artefacts;
-# the app role copies them by default. Put a real bia.toml there if you want the
+# Application service. `make artefacts` stages binaries/config in deploy/artefacts;
+# the app role copies them by default. The unit is read from deploy/bia-quiz.service.
 # role to install it too; otherwise deploy the config manually.
 # bia_app_copy_binary: true
 

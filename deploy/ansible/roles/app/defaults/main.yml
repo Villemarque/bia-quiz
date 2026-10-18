@@ -5,7 +5,7 @@ bia_app_config: /etc/bia-quiz/bia.toml
 bia_app_artefact_dir: "{{ playbook_dir }}/../artefacts"
 bia_app_binary_src: "{{ bia_app_artefact_dir }}/bia-quiz"
 bia_app_import_src: "{{ bia_app_artefact_dir }}/bia-import"
-bia_app_service_src: "{{ bia_app_artefact_dir }}/bia-quiz.service"
+bia_app_service_src: "{{ playbook_dir }}/../bia-quiz.service"
 # Optional: if present, this file is installed as /etc/bia-quiz/bia.toml.
 bia_app_config_src: "{{ bia_app_artefact_dir }}/bia.toml"
 

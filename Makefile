@@ -47,9 +47,9 @@ artefacts: frontend
 	cargo zigbuild --release --target $(CROSS_TARGET).$(CROSS_GLIBC) \
 		-p bia-importer --bin bia-import
 	mkdir -p $(ARTEFACT_DIR)
+	rm -f $(ARTEFACT_DIR)/bia-quiz.service
 	cp $(CROSS_BIN) $(ARTEFACT_DIR)/bia-quiz
 	cp $(CROSS_IMPORT) $(ARTEFACT_DIR)/bia-import
-	cp deploy/bia-quiz.service $(ARTEFACT_DIR)/bia-quiz.service
 	cp deploy/bia.toml.example $(ARTEFACT_DIR)/bia.toml.example
 	@if [ -f "$(APP_CONFIG)" ]; then \
 		cp "$(APP_CONFIG)" $(ARTEFACT_DIR)/bia.toml; \
@@ -59,7 +59,7 @@ artefacts: frontend
 		echo "no real config staged; create deploy/bia.toml or $(ARTEFACT_DIR)/bia.toml"; \
 	fi
 	chmod 0755 $(ARTEFACT_DIR)/bia-quiz $(ARTEFACT_DIR)/bia-import
-	chmod 0644 $(ARTEFACT_DIR)/bia-quiz.service $(ARTEFACT_DIR)/bia.toml.example
+	chmod 0644 $(ARTEFACT_DIR)/bia.toml.example
 	file $(ARTEFACT_DIR)/bia-quiz $(ARTEFACT_DIR)/bia-import
 	@echo "artefacts staged in $(ARTEFACT_DIR)/"
 
