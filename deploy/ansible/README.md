@@ -7,10 +7,12 @@ One role per task:
 - **`sshd`** — the SSH daemon port;
 - **`caddy`** — Caddy installation, `Caddyfile` and TLS;
 - **`unattended_upgrades`** — Debian security updates and the apt daily timers;
-- **`fail2ban`** — the SSH jail with bantime/findtime/maxretry policy.
+- **`fail2ban`** — the SSH jail with bantime/findtime/maxretry policy;
+- **`app`** — the `bia-quiz` systemd unit and service lifecycle.
 
-The roles do not touch the application binary, config, application systemd unit,
-database or imports. Deploy the app with [`../README.md`](../README.md) §4–§9.
+The roles do not create the application config, database or imports. The `app` role
+installs the systemd unit and can optionally copy the binary; deploy the files with
+[`../README.md`](../README.md) §4–§9.
 
 Targets: **Debian 12 (bookworm) / Debian 13 (trixie)**, reached over SSH with `sudo`
 and Python 3.
@@ -27,9 +29,12 @@ mkdir -p group_vars
 cp group_vars/all.yml.example group_vars/all.yml
 $EDITOR inventory.yml group_vars/all.yml
 
-ansible-playbook site.yml --check --diff
-ansible-playbook site.yml
+ansible-playbook site.yml --check --diff --skip-tags app
+ansible-playbook site.yml --skip-tags app
 ```
+
+The `app` role needs the binary/config from `deploy/README.md` §4. Run it later with
+`ansible-playbook site.yml --tags app`.
 
 Accept the host key first if needed: `ssh-keyscan -H <server> >> ~/.ssh/known_hosts`.
 
@@ -81,9 +86,14 @@ reachable. The example uses `quiz.asso-triple-a.org`; change it if your hostname
 - Installs and configures `unattended-upgrades` for Debian stable + security updates,
   and enables `apt-daily.timer` / `apt-daily-upgrade.timer`.
 - Installs `fail2ban`, enables the `sshd` jail on `bia_ssh_port`, and starts the service.
+- Installs the `bia-quiz` systemd unit and starts the service once the binary and
+  `/etc/bia-quiz/bia.toml` exist. `bia_app_copy_binary: true` copies
+  `target/release/bia-quiz` from the controller; the config is never templated by this
+  role.
 
-It does **not**: deploy the app, create the app database, configure DNS, open ports in a
-cloud provider firewall, change root login, or remove SSH keys. Those stay manual.
+It does **not**: create `/etc/bia-quiz/bia.toml`, import the question bank, configure
+DNS, open ports in a cloud provider firewall, change root login, or remove SSH keys.
+Those stay manual.
 
 ## Users
 
@@ -258,6 +268,23 @@ bia_fail2ban_ignoreip: "127.0.0.1/8 ::1"
 - Whitelist trusted addresses in `bia_fail2ban_ignoreip` (space-separated CIDRs).
 - Check with `fail2ban-client status sshd`; logs are in `journalctl -u fail2ban`.
 
+## Application service
+
+```yaml
+# optional: copy target/release/bia-quiz from the controller
+bia_app_copy_binary: false
+```
+
+- The role installs `/etc/systemd/system/bia-quiz.service`, enables it and starts it.
+- It requires `/opt/bia-quiz/bia-quiz` and `/etc/bia-quiz/bia.toml`; if either is
+  missing it stops with a clear error instead of starting a broken service.
+- The config contains passwords, so it is deployed manually (or by your secret tooling),
+  not templated by this role.
+- First host-prep run: use `--skip-tags app`; after `deploy/README.md` §4, run
+  `ansible-playbook site.yml --tags app`.
+- Importing the question bank remains an explicit `/admin` or CLI step; the role does
+  not populate the database.
+
 ## Tags
 
 ```sh
@@ -267,6 +294,7 @@ ansible-playbook site.yml --tags sshd       # SSH daemon port
 ansible-playbook site.yml --tags caddy      # Caddy install, config, TLS
 ansible-playbook site.yml --tags unattended # unattended-upgrades
 ansible-playbook site.yml --tags fail2ban   # fail2ban sshd jail
+ansible-playbook site.yml --tags app        # systemd unit + app service
 ```
 
 The firewall/SSH-port assertion runs with the firewall role.
@@ -314,5 +342,13 @@ Installed by `ansible-galaxy collection install -r requirements.yml`.
 ## App deployment
 
 Continue with [`README.md`](../README.md) §4. The roles create the service account and
-its home; still create `/var/lib/bia-quiz/backups` and install the files/config as
-described there. Caddy is already configured by the `caddy` role.
+its home; still create `/var/lib/bia-quiz/backups` and install the binary/config as
+described there. Then run the `app` role:
+
+```sh
+ansible-playbook site.yml --tags app
+```
+
+It installs the systemd unit and starts the service after checking both files exist.
+It does not import the question bank; use `/admin` or the CLI. Caddy is already
+configured by the `caddy` role.

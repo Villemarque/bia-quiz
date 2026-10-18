@@ -1,0 +1,6 @@
+---
+- name: Restart bia-quiz
+  ansible.builtin.systemd:
+    name: "{{ bia_app_service_name }}"
+    state: restarted
+    daemon_reload: true

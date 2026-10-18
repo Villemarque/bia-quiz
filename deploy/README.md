@@ -1,19 +1,21 @@
 # Deploying `bia-quiz` on Debian
 
 A complete runbook starting from a fresh **Debian 12 (bookworm) or Debian 13 (trixie)**
-VM. Host users, UFW, Caddy, unattended upgrades and fail2ban are managed by
-[`ansible/`](ansible/); the application files, systemd, imports and backups are manual.
-v1 uses **axum-login sessions**
+VM. Host users, UFW, SSH, Caddy, unattended upgrades, fail2ban and the systemd unit are
+managed by [`ansible/`](ansible/); the application binary/config, imports and backups are
+manual. v1 uses **axum-login sessions**
 (`prof` and `admin` accounts) and imports from `/admin` or the CLI.
 
 ## Quick start
 
 1. Provision **Debian 13 (trixie)** or **Debian 12 (bookworm)** and point DNS at it
    (§1–§2).
-2. Create the `deploy` admin, the `bia-quiz` service account, configure UFW, Caddy,
-   unattended upgrades and fail2ban with [Ansible](ansible/) (§2.5).
+2. Create the `deploy` admin, the `bia-quiz` service account and configure UFW, SSH,
+   Caddy, unattended upgrades and fail2ban with [Ansible](ansible/) (§2.5). Skip the
+   `app` tag on this first host-prep run.
 3. Build on the controller and upload the bundle (§3).
-4. Install the files (§4), import the bank (§5) and start the service (§6).
+4. Install the files (§4), import the bank (§5), then let Ansible install/start the
+   systemd unit (§6).
 5. Run the checklist (§8) and set up backups (§9).
 
 The sections below are the full reference, including upgrades, security and
@@ -74,13 +76,14 @@ the record to **DNS only** until the certificate is issued (or use an origin cer
 
 ## 2.5 Host preparation (Ansible): users, firewall, Caddy, upgrades and fail2ban
 
-The Ansible roles in [`ansible/`](ansible/) manage **Linux users, UFW, Caddy,
-unattended upgrades and fail2ban only**. They do not deploy the binary, config, systemd
-unit, database or imports; those are §4–§9. Configured as below, they create the
-`deploy` admin and the `bia-quiz` service account, install the deploy user's SSH key and
-passwordless sudo, configure UFW for SSH/80/443 with a default-deny incoming policy,
-install/configure Caddy for TLS, enable Debian security updates, and install the fail2ban
-SSH jail.
+The Ansible roles in [`ansible/`](ansible/) manage **Linux users, UFW, SSH, Caddy,
+unattended upgrades, fail2ban and the `bia-quiz` systemd unit**. They do not create the
+application config, database or imports; the binary can be copied optionally with
+`bia_app_copy_binary`. Configured as below, they create the `deploy` admin and the
+`bia-quiz` service account, install the deploy user's SSH key and passwordless sudo,
+configure UFW for SSH/80/443 with a default-deny incoming policy, install/configure Caddy
+for TLS, enable Debian security updates, install the fail2ban SSH jail, and install/start
+the app service (the `app` role is skipped on the first host-prep run).
 
 Install Ansible on the controller, not on the server:
 
@@ -99,9 +102,12 @@ mkdir -p group_vars
 cp group_vars/all.yml.example group_vars/all.yml
 $EDITOR inventory.yml group_vars/all.yml
 
-ansible-playbook site.yml --check --diff
-ansible-playbook site.yml
+ansible-playbook site.yml --check --diff --skip-tags app
+ansible-playbook site.yml --skip-tags app
 ```
+
+The `app` role is skipped here because it requires the binary/config installed in §4.
+Run `ansible-playbook site.yml --tags app` after that section.
 
 `inventory.yml` connects as **root** (or the provider's initial sudo user) on a blank
 server:

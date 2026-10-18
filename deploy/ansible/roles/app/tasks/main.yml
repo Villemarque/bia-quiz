@@ -1,0 +1,56 @@
+---
+- name: Create application directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /opt/bia-quiz
+    - /etc/bia-quiz
+
+- name: Copy the application binary
+  ansible.builtin.copy:
+    src: "{{ bia_app_binary_src }}"
+    dest: "{{ bia_app_binary }}"
+    owner: root
+    group: root
+    mode: "0755"
+  when: bia_app_copy_binary | bool
+  notify: Restart bia-quiz
+
+- name: Check the application binary and config
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ bia_app_binary }}"
+    - "{{ bia_app_config }}"
+  register: bia_app_files
+
+- name: Require the binary and config before starting the service
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: >-
+      Missing {{ item.item }}. Deploy the binary/config as described in
+      deploy/README.md §4, or set bia_app_copy_binary: true for the binary.
+  loop: "{{ bia_app_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Install the bia-quiz systemd unit
+  ansible.builtin.copy:
+    src: "{{ bia_app_service_src }}"
+    dest: /etc/systemd/system/{{ bia_app_service_name }}.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart bia-quiz
+
+- name: Enable and start bia-quiz
+  ansible.builtin.systemd:
+    name: "{{ bia_app_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true

@@ -29,6 +29,11 @@ bia_enable_caddy: true
 bia_domain: quiz.asso-triple-a.org
 bia_app_port: 8080
 
+
+# Application service. The binary can be copied from the controller; the config
+# remains a manual/secrets step. The app role waits for both.
+# bia_app_copy_binary: false
+
 # Debian security updates. Reboot automatically at 03:30 when required.
 bia_enable_unattended_upgrades: true
 bia_unattended_automatic_reboot: true

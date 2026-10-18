@@ -15,3 +15,5 @@
       tags: [unattended]
     - role: fail2ban
       tags: [fail2ban]
+    - role: app
+      tags: [app]
