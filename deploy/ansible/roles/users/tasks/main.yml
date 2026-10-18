@@ -46,14 +46,35 @@
     - item.home is defined
     - item.create_home | default(true)
 
+- name: Check managed SSH public key files
+  ansible.builtin.stat:
+    path: "{{ item.1 }}"
+  loop: "{{ bia_users | subelements('ssh_authorized_key_files', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }}: {{ item.1 }}"
+  delegate_to: localhost
+  become: false
+  register: bia_ssh_key_files
+
+- name: Fail on a missing SSH public key file
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: >-
+      Missing {{ item.item.1 }} for {{ item.item.0.name }}.
+      Create it or change ssh_authorized_key_files in group_vars/all.yml.
+  loop: "{{ bia_ssh_key_files.results }}"
+  loop_control:
+    label: "{{ item.item.0.name }}"
+
 - name: Install SSH authorized keys
   ansible.posix.authorized_key:
     user: "{{ item.0.name }}"
-    key: "{{ item.1 }}"
+    key: "{{ lookup('ansible.builtin.file', item.1) | trim }}"
     state: present
-  loop: "{{ bia_users | subelements('ssh_authorized_keys', skip_missing=True) }}"
+  loop: "{{ bia_users | subelements('ssh_authorized_key_files', skip_missing=True) }}"
   loop_control:
-    label: "{{ item.0.name }}"
+    label: "{{ item.0.name }}: {{ item.1 }}"
 
 - name: Grant passwordless sudo to managed users
   ansible.builtin.copy:

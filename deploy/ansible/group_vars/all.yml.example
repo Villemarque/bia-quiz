@@ -1,6 +1,6 @@
 # Copy this file to group_vars/all.yml and edit it. Do not commit that file.
 
-# Users managed on the host. The default is the application service account.
+# Users managed on the host. Keys are read from files on the controller.
 bia_users:
   - name: bia-quiz
     system: true
@@ -9,23 +9,20 @@ bia_users:
     shell: /usr/sbin/nologin
     create_home: true
     home_mode: "0750"
-    ssh_authorized_keys: []
+    ssh_authorized_key_files:
+      - ~/.ssh/bia-quiz.pub
     sudo: false
 
-  # An SSH admin user. Uncomment, set your key(s), and keep another way in.
-  # Keys are added, never removed, and existing keys are left alone.
-  # - name: deploy
-  #   system: false
-  #   group: deploy
-  #   home: /home/deploy
-  #   shell: /bin/bash
-  #   create_home: true
-  #   home_mode: "0700"
-  #   # groups: [adm]
-  #   # append: true
-  #   ssh_authorized_keys:
-  #     - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... you@laptop"
-  #   sudo: true          # writes /etc/sudoers.d/deploy with NOPASSWD:ALL
+  - name: deploy
+    system: false
+    group: deploy
+    home: /home/deploy
+    shell: /bin/bash
+    create_home: true
+    home_mode: "0700"
+    ssh_authorized_key_files:
+      - ~/.ssh/bia-quiz-deploy.pub
+    sudo: true          # writes /etc/sudoers.d/deploy with NOPASSWD:ALL
 
 # Caddy. bia_domain must be a real public hostname whose DNS points at this server.
 bia_enable_caddy: true

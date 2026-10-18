@@ -9,5 +9,5 @@ bia_users:
     shell: /usr/sbin/nologin
     create_home: true
     home_mode: "0750"
-    ssh_authorized_keys: []
+    ssh_authorized_key_files: []
     sudo: false

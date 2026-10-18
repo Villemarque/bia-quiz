@@ -36,9 +36,16 @@ Accept the host key first if needed: `ssh-keyscan -H <server> >> ~/.ssh/known_ho
 
 The account Ansible connects as must already have `sudo`; the roles cannot bootstrap
 their own access. On a blank server use **root** (as in `inventory.example.yml`) or the
-provider's initial sudo user. Add your `deploy` user to `bia_users` with your public key
-and `sudo: true`; after verifying key login, change `ansible_user` to `deploy` for later
-runs.
+provider's initial sudo user. The example `deploy` user reads
+`~/.ssh/bia-quiz-deploy.pub`; after verifying key login, change `ansible_user` to
+`deploy` for later runs.
+
+Create the two example public keys on the controller (or repoint the file paths):
+
+```sh
+ssh-keygen -t ed25519 -f ~/.ssh/bia-quiz
+ssh-keygen -t ed25519 -f ~/.ssh/bia-quiz-deploy
+```
 
 ### DNS and Caddy
 
@@ -51,8 +58,8 @@ refuses to run with it.
 
 - Creates the users in `bia_users`. The default is the unprivileged service account
   `bia-quiz` (`nologin`, `/var/lib/bia-quiz` mode `0750`).
-- For any user with `ssh_authorized_keys`, installs the keys with
-  `ansible.posix.authorized_key`. Existing keys are **not** removed.
+- For any user with `ssh_authorized_key_files`, reads each controller file and installs
+  the key with `ansible.posix.authorized_key`. Existing keys are **not** removed.
 - For any user with `sudo: true`, writes `/etc/sudoers.d/<name>` with
   `NOPASSWD:ALL` and validates it with `visudo`.
 - Installs UFW, allows `bia_ufw_allowed_tcp_ports` (default: SSH, 80, 443), and enables
@@ -81,11 +88,12 @@ bia_users:
     shell: /usr/sbin/nologin
     create_home: true
     home_mode: "0750"
-    ssh_authorized_keys: []
+    ssh_authorized_key_files:
+      - ~/.ssh/bia-quiz.pub
     sudo: false
 ```
 
-Add an SSH admin user (see the commented example in `group_vars/all.yml.example`):
+Add an SSH admin user (see `group_vars/all.yml.example` for the active example):
 
 ```yaml
 bia_users:
@@ -96,6 +104,8 @@ bia_users:
     shell: /usr/sbin/nologin
     create_home: true
     home_mode: "0750"
+    ssh_authorized_key_files:
+      - ~/.ssh/bia-quiz.pub
     sudo: false
 
   - name: deploy
@@ -105,8 +115,8 @@ bia_users:
     shell: /bin/bash
     create_home: true
     home_mode: "0700"
-    ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... you@laptop"
+    ssh_authorized_key_files:
+      - ~/.ssh/bia-quiz-deploy.pub
     sudo: true
 ```
 
@@ -126,8 +136,10 @@ bia_users:
 | `shell` | tool default | Login shell |
 | `create_home` | `true` | Create the home directory |
 | `home_mode` | `"0755"` | Home mode, applied when `home` is set and `create_home` is true |
-| `ssh_authorized_keys` | `[]` | Keys to add (never removes existing) |
+| `ssh_authorized_key_files` | `[]` | Controller paths to `.pub` files (never removes existing) |
 | `sudo` | `false` | Write a passwordless sudoers entry |
+
+Paths are read on the controller; no key material belongs in group vars.
 
 `sudo: true` grants **passwordless** sudo. Remove it or edit the generated
 `/etc/sudoers.d/<name>` if you want a password prompt. The role also **removes**

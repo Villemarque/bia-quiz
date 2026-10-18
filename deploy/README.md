@@ -115,9 +115,18 @@ all:
           ansible_user: root
 ```
 
-In `group_vars/all.yml`, uncomment the example `deploy` user and paste your public key;
-set `sudo: true` for passwordless sudo. Keep the `bia-quiz` entry. Set `bia_domain` to
-the public hostname and `bia_app_port` to `8080` (it must match `[server].bind` in
+Create the two key pairs on the controller (or point the paths at existing keys):
+
+```sh
+ssh-keygen -t ed25519 -f ~/.ssh/bia-quiz
+ssh-keygen -t ed25519 -f ~/.ssh/bia-quiz-deploy
+```
+
+The example `bia_users` already creates `bia-quiz` and `deploy`, reading their public
+keys from the controller at `~/.ssh/bia-quiz.pub` and
+`~/.ssh/bia-quiz-deploy.pub`; create those keys or change the paths. No key material is
+pasted into group vars. `deploy` has `sudo: true` for passwordless sudo. Set `bia_domain`
+to the public hostname and `bia_app_port` to `8080` (it must match `[server].bind` in
 `bia.toml`); the Caddy role refuses the example domain. If SSH is not on 22, set
 `bia_ssh_port`; the default allowed list follows it (or set
 `bia_ufw_allowed_tcp_ports` explicitly). The preflight refuses to enable UFW if
