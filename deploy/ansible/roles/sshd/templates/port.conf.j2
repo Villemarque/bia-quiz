@@ -1,2 +1,5 @@
 # Managed by Ansible.
 Port {{ bia_ssh_port }}
+PubkeyAuthentication yes
+PasswordAuthentication {{ 'yes' if bia_ssh_password_authentication | bool else 'no' }}
+KbdInteractiveAuthentication {{ 'yes' if bia_ssh_password_authentication | bool else 'no' }}

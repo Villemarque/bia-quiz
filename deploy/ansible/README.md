@@ -53,6 +53,10 @@ run `ansible-playbook site.yml -k -K`, or set `ansible_password` and
 `ansible_become_password` in the gitignored `inventory.yml`. Ansible does **not** prompt
 for passwords unless `-k` (SSH) or `-K` (sudo) is passed.
 
+The `sshd` role disables password authentication on the first run. Verify the `deploy`
+key login **before** closing your session; later runs must use
+`ansible_user: deploy` and its key (remove `ansible_password`).
+
 ### DNS and Caddy
 
 Create the DNS `A`/`AAAA` record for `bia_domain` **before** running the playbook. Caddy
@@ -79,8 +83,7 @@ reachable. The example uses `quiz.asso-triple-a.org`; change it if your hostname
 - Installs `fail2ban`, enables the `sshd` jail on `bia_ssh_port`, and starts the service.
 
 It does **not**: deploy the app, create the app database, configure DNS, open ports in a
-cloud provider firewall, change root/password authentication, or remove SSH keys. Those
-stay manual.
+cloud provider firewall, change root login, or remove SSH keys. Those stay manual.
 
 ## Users
 
@@ -157,11 +160,16 @@ Paths are read on the controller; no key material belongs in group vars.
 ```yaml
 bia_manage_ssh_port: true
 bia_ssh_port: 22
+bia_ssh_password_authentication: false
 ```
 
 - The role comments active `Port` lines in `/etc/ssh/sshd_config` and writes
   `/etc/ssh/sshd_config.d/99-bia-quiz-port.conf`.
-- It validates with `sshd -t`, then restarts SSH.
+- It enables public-key authentication, disables `PasswordAuthentication` and
+  `KbdInteractiveAuthentication`, validates the effective config with `sshd -T`, then
+  restarts SSH.
+- Password login is disabled by default. Verify key login before closing the current
+  session; keep a console available until then.
 - UFW and the fail2ban jail use the same `bia_ssh_port`.
 - **After changing the port**, set `ansible_port` to the same value in
   `inventory.yml` for later runs and use `ssh -p <port>` / `scp -P <port>`.

@@ -2,3 +2,5 @@
 bia_manage_ssh_port: true
 # Keep this in sync with bia_ufw_allowed_tcp_ports and the fail2ban jail.
 bia_ssh_port: 22
+# Key-only SSH. Set true only if you really need password authentication.
+bia_ssh_password_authentication: false

@@ -52,7 +52,8 @@ The `deploy` admin account, its SSH key and sudoers entry, the `bia-quiz` servic
 account, UFW, Caddy, unattended upgrades and fail2ban are set up by the Ansible playbook
 in §2.5.
 Keep a root/console session open until you have verified SSH as `deploy`. The daemon port is managed by
-Ansible in §2.5; root/password authentication hardening is still manual.
+Ansible in §2.5, and the playbook disables password authentication; root-login
+hardening is still manual.
 
 ## 2. DNS
 
@@ -125,6 +126,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/bia-quiz-deploy
 If the bootstrap account uses password auth, install `sshpass` on the controller and
 run the playbook with `-k -K`, or set `ansible_password` / `ansible_become_password` in
 the gitignored `inventory.yml`. Ansible does not prompt automatically without those flags.
+The first run disables password authentication; verify key login as `deploy` before
+closing the current session.
 
 The example `bia_users` already creates `bia-quiz` and `deploy`, reading their public
 keys from the controller at `~/.ssh/bia-quiz.pub` and
@@ -154,10 +157,11 @@ ssh -p <bia_ssh_port> deploy@<server> 'sudo fail2ban-client status sshd'
 ```
 
 Then switch `ansible_user` to `deploy` and set `ansible_port` to `bia_ssh_port` for later
-runs. Root/password authentication hardening is manual; only after key login works:
+runs. Ansible already disables password authentication; root-login hardening is manual,
+only after key login works:
 
 ```sh
-sudoedit /etc/ssh/sshd_config   # PermitRootLogin no, PasswordAuthentication no
+sudoedit /etc/ssh/sshd_config   # PermitRootLogin no (password auth is already disabled)
 sudo systemctl restart ssh
 ```
 

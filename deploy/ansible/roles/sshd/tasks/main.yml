@@ -30,3 +30,21 @@
   ansible.builtin.command: /usr/sbin/sshd -t
   changed_when: false
   when: bia_manage_ssh_port | bool
+
+- name: Read the effective SSH configuration
+  ansible.builtin.command: /usr/sbin/sshd -T
+  register: bia_sshd_effective
+  changed_when: false
+  when: bia_manage_ssh_port | bool
+
+- name: Verify SSH password authentication is disabled
+  ansible.builtin.assert:
+    that:
+      - "'passwordauthentication no' in bia_sshd_effective.stdout"
+      - "'kbdinteractiveauthentication no' in bia_sshd_effective.stdout"
+    fail_msg: >-
+      Effective sshd configuration still allows password authentication.
+      SSH was not restarted; fix the config before closing your session.
+  when:
+    - bia_manage_ssh_port | bool
+    - not bia_ssh_password_authentication | bool
