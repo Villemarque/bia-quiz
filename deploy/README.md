@@ -197,15 +197,15 @@ file deploy/artefacts/bia-quiz
 directory. The systemd unit stays in `deploy/bia-quiz.service` and is copied from
 there. The glibc floor is `2.36` by default (works on Debian 12 and 13).
 
-Put your real config in `deploy/bia.toml` (gitignored) before running the target; it is
-copied to `deploy/artefacts/bia.toml` and then installed by the Ansible `app` role:
+Put the real config **directly** in `deploy/artefacts/bia.toml` (the whole directory is
+gitignored). `make artefacts` preserves it; copy the staged example and edit it:
 
 ```sh
-cp deploy/bia.toml.example deploy/bia.toml
-$EDITOR deploy/bia.toml
+cp deploy/artefacts/bia.toml.example deploy/artefacts/bia.toml
+$EDITOR deploy/artefacts/bia.toml
 ```
 
-You can override the source with `make artefacts APP_CONFIG=/path/to/bia.toml`.
+The Ansible `app` role installs that file as `/etc/bia-quiz/bia.toml`.
 Prerequisites on the controller:
 
 ```sh
@@ -216,7 +216,6 @@ cargo install cargo-zigbuild
 
 Override the glibc floor if needed with `make artefacts CROSS_GLIBC=2.41`. If the
 controller is already x86_64 Linux, plain `make build` also works; a macOS/aarch64
-`make build` will not. `make cross` and `make build-artefact` are aliases.
 
 For the Ansible path, the `app` role copies the staged files directly from
 `deploy/artefacts/`; there is no separate SCP step. For the manual fallback, create a

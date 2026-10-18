@@ -32,6 +32,7 @@ bia_app_port: 8080
 
 # Application service. `make artefacts` stages binaries/config in deploy/artefacts;
 # the app role copies them by default. The unit is read from deploy/bia-quiz.service.
+# Put the real config at deploy/artefacts/bia.toml.
 # role to install it too; otherwise deploy the config manually.
 # bia_app_copy_binary: true
 

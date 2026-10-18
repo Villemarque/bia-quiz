@@ -349,9 +349,9 @@ Installed by `ansible-galaxy collection install -r requirements.yml`.
 
 Continue with [`README.md`](../README.md) §4. On the controller run `make artefacts`;
 the `app` role copies the binaries from `deploy/artefacts/` and the unit directly from
-`deploy/bia-quiz.service`. Put the real config at `deploy/bia.toml` (gitignored) before
-`make artefacts`, or place it directly at `deploy/artefacts/bia.toml`. The role installs
-it if present; otherwise deploy `/etc/bia-quiz/bia.toml` manually.
+`deploy/bia-quiz.service`. Put the real config directly at
+`deploy/artefacts/bia.toml` (copy the staged `bia.toml.example` and edit it). The role
+installs it if present; otherwise deploy `/etc/bia-quiz/bia.toml` manually.
 
 ```sh
 ansible-playbook site.yml --tags app

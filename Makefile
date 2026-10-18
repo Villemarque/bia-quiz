@@ -35,7 +35,6 @@ CROSS_DIR    := $(TARGET_DIR)/$(CROSS_TARGET)/release
 CROSS_BIN    := $(CROSS_DIR)/bia-quiz
 CROSS_IMPORT := $(CROSS_DIR)/bia-import
 ARTEFACT_DIR := deploy/artefacts
-APP_CONFIG   ?= deploy/bia.toml
 
 artefacts: frontend
 	@command -v cargo-zigbuild >/dev/null 2>&1 || { \
@@ -51,12 +50,9 @@ artefacts: frontend
 	cp $(CROSS_BIN) $(ARTEFACT_DIR)/bia-quiz
 	cp $(CROSS_IMPORT) $(ARTEFACT_DIR)/bia-import
 	cp deploy/bia.toml.example $(ARTEFACT_DIR)/bia.toml.example
-	@if [ -f "$(APP_CONFIG)" ]; then \
-		cp "$(APP_CONFIG)" $(ARTEFACT_DIR)/bia.toml; \
-		chmod 0600 $(ARTEFACT_DIR)/bia.toml; \
-		echo "staged real config from $(APP_CONFIG)"; \
-	elif [ ! -f $(ARTEFACT_DIR)/bia.toml ]; then \
-		echo "no real config staged; create deploy/bia.toml or $(ARTEFACT_DIR)/bia.toml"; \
+	@if [ ! -f $(ARTEFACT_DIR)/bia.toml ]; then \
+		echo "note: put the real config directly at $(ARTEFACT_DIR)/bia.toml"; \
+		echo "      (copy bia.toml.example and edit it)"; \
 	fi
 	chmod 0755 $(ARTEFACT_DIR)/bia-quiz $(ARTEFACT_DIR)/bia-import
 	chmod 0644 $(ARTEFACT_DIR)/bia.toml.example
