@@ -122,6 +122,10 @@ ssh-keygen -t ed25519 -f ~/.ssh/bia-quiz
 ssh-keygen -t ed25519 -f ~/.ssh/bia-quiz-deploy
 ```
 
+If the bootstrap account uses password auth, install `sshpass` on the controller and
+run the playbook with `-k -K`, or set `ansible_password` / `ansible_become_password` in
+the gitignored `inventory.yml`. Ansible does not prompt automatically without those flags.
+
 The example `bia_users` already creates `bia-quiz` and `deploy`, reading their public
 keys from the controller at `~/.ssh/bia-quiz.pub` and
 `~/.ssh/bia-quiz-deploy.pub`; create those keys or change the paths. No key material is

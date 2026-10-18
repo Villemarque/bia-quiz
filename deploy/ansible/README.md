@@ -48,6 +48,11 @@ ssh-keygen -t ed25519 -f ~/.ssh/bia-quiz
 ssh-keygen -t ed25519 -f ~/.ssh/bia-quiz-deploy
 ```
 
+If the initial `root`/provider account only accepts a password, install `sshpass` and
+run `ansible-playbook site.yml -k -K`, or set `ansible_password` and
+`ansible_become_password` in the gitignored `inventory.yml`. Ansible does **not** prompt
+for passwords unless `-k` (SSH) or `-K` (sudo) is passed.
+
 ### DNS and Caddy
 
 Create the DNS `A`/`AAAA` record for `bia_domain` **before** running the playbook. Caddy

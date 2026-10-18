@@ -27,6 +27,7 @@
     # Deploy automation
     ansible
     ansible-lint
+    sshpass
   ];
 
   env = {
