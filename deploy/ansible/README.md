@@ -266,6 +266,39 @@ ansible-playbook site.yml --tags fail2ban   # fail2ban sshd jail
 
 The firewall/SSH-port assertion runs with the firewall role.
 
+## Logs and retries
+
+`ansible.cfg` writes a log to `deploy/ansible/ansible.log` when you run the playbook
+from this directory. It is gitignored. For a one-off verbose log:
+
+```sh
+ANSIBLE_LOG_PATH=/tmp/bia-ansible.log \
+  ansible-playbook -vvv site.yml 2>&1 | tee /tmp/bia-ansible-console.log
+```
+
+- The failed task is the last `fatal:` block before `PLAY RECAP`; the recap shows
+  `failed=…` and the host.
+- List task names with `ansible-playbook site.yml --list-tasks`.
+- Resume after a failure:
+  ```sh
+  ansible-playbook site.yml --start-at-task="Task name"
+  ```
+- Run one task at a time with `--step`.
+- Use `--tags users`, `--tags sshd`, etc. to rerun only the failed area.
+- Server-side logs:
+  ```sh
+  journalctl -xe
+  journalctl -u ssh -u caddy -u fail2ban -n 100 --no-pager
+  systemctl status ssh caddy fail2ban
+  sshd -t
+  sshd -T | grep -Ei 'port|passwordauth|kbd|pubkey'
+  ufw status verbose
+  ```
+
+If the playbook changed the SSH port or disabled password auth before failing, reconnect
+using the new port and `deploy` key (or the provider console), then fix `inventory.yml`
+before rerunning.
+
 ## Requirements
 
 - `community.general` for `ufw`
