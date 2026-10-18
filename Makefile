@@ -12,7 +12,7 @@ RELEASE_DIR := $(TARGET_DIR)$(if $(TARGET_TRIPLE),/$(TARGET_TRIPLE),)/release
 BIN         := $(RELEASE_DIR)/bia-quiz
 IMPORT_BIN  := $(RELEASE_DIR)/bia-import
 
-.PHONY: all build frontend import run test check clean distclean doctor
+.PHONY: all build frontend import run test check clean distclean doctor uname
 
 all: build
 
@@ -49,6 +49,9 @@ check:
 	cargo fmt --check
 	cargo clippy --workspace --all-targets -- -D warnings
 	pnpm --dir $(FRONTEND) check
+
+uname:
+	@uname -a
 
 doctor:
 	@echo "host OS/arch       : $$(uname -s) $$(uname -m)"

@@ -74,6 +74,7 @@ and `/healthz` to the backend. The shell also exposes `test`, `check`, `fmt`, `l
 | `make import` | build, download the upstream TSV + figures, then (re)import into `bia.sqlite3` |
 | `make test` | `cargo test --workspace` + `svelte-check` |
 | `make check` | `cargo fmt --check`, `clippy -D warnings`, `svelte-check` |
+| `make uname` | print the full `uname -a` host/kernel string |
 | `make doctor` | print host OS/arch vs the binary's ELF/interpreter |
 | `make clean` | remove this workspace's Cargo artifacts, `frontend/dist`, `frontend/node_modules`, `.pnpm-store` (keeps the database) |
 | `make distclean` | `clean` + delete `bia.sqlite3*` and `import-report.txt` (**destructive**) |
