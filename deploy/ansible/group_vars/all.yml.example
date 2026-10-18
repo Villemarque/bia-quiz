@@ -43,7 +43,9 @@ bia_fail2ban_findtime: "10m"
 bia_fail2ban_maxretry: 5
 bia_fail2ban_ignoreip: "127.0.0.1/8 ::1"
 
-# Firewall. Keep the SSH port in this list or you will lock yourself out.
+# SSH daemon port and firewall. Keep ansible_port in inventory.yml in sync after
+# changing this value.
+bia_manage_ssh_port: true
 bia_ssh_port: 22
 bia_enable_ufw: true
 bia_ufw_allowed_tcp_ports:

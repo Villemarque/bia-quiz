@@ -7,6 +7,8 @@
       tags: [users]
     - role: firewall
       tags: [firewall]
+    - role: sshd
+      tags: [sshd]
     - role: caddy
       tags: [caddy]
     - role: unattended_upgrades

@@ -4,6 +4,7 @@ One role per task:
 
 - **`users`** — Linux accounts, SSH keys, sudoers;
 - **`firewall`** — UFW rules and default policy;
+- **`sshd`** — the SSH daemon port;
 - **`caddy`** — Caddy installation, `Caddyfile` and TLS;
 - **`unattended_upgrades`** — Debian security updates and the apt daily timers;
 - **`fail2ban`** — the SSH jail with bantime/findtime/maxretry policy.
@@ -64,6 +65,8 @@ refuses to run with it.
   `NOPASSWD:ALL` and validates it with `visudo`.
 - Installs UFW, allows `bia_ufw_allowed_tcp_ports` (default: SSH, 80, 443), and enables
   it with a default-deny incoming policy.
+- Sets the SSH daemon port to `bia_ssh_port` through a drop-in config and restarts SSH
+  after validating the config.
 - Installs Caddy from the official repository, writes the `Caddyfile` for `bia_domain`,
   and starts/reloads it. Caddy obtains and renews the TLS certificate automatically and
   proxies to `127.0.0.1:{{ bia_app_port }}`.
@@ -72,8 +75,8 @@ refuses to run with it.
 - Installs `fail2ban`, enables the `sshd` jail on `bia_ssh_port`, and starts the service.
 
 It does **not**: deploy the app, create the app database, configure DNS, open ports in a
-cloud provider firewall, harden `sshd`, disable root login, or remove SSH keys. Those stay
-manual.
+cloud provider firewall, change root/password authentication, or remove SSH keys. Those
+stay manual.
 
 ## Users
 
@@ -144,6 +147,24 @@ Paths are read on the controller; no key material belongs in group vars.
 `sudo: true` grants **passwordless** sudo. Remove it or edit the generated
 `/etc/sudoers.d/<name>` if you want a password prompt. The role also **removes**
 `/etc/sudoers.d/<name>` for managed users with `sudo: false`.
+
+## SSH port
+
+```yaml
+bia_manage_ssh_port: true
+bia_ssh_port: 22
+```
+
+- The role comments active `Port` lines in `/etc/ssh/sshd_config` and writes
+  `/etc/ssh/sshd_config.d/99-bia-quiz-port.conf`.
+- It validates with `sshd -t`, then restarts SSH.
+- UFW and the fail2ban jail use the same `bia_ssh_port`.
+- **After changing the port**, set `ansible_port` to the same value in
+  `inventory.yml` for later runs and use `ssh -p <port>` / `scp -P <port>`.
+- The current Ansible connection survives the restart; keep a console session open until
+  the new port is verified.
+- On an existing host, the old UFW rule is left in place; remove it manually after
+  verifying the new port if you no longer want the old one open.
 
 ## Firewall
 
@@ -225,6 +246,7 @@ bia_fail2ban_ignoreip: "127.0.0.1/8 ::1"
 ```sh
 ansible-playbook site.yml --tags users      # users, keys, sudoers
 ansible-playbook site.yml --tags firewall   # UFW install, rules, enable
+ansible-playbook site.yml --tags sshd       # SSH daemon port
 ansible-playbook site.yml --tags caddy      # Caddy install, config, TLS
 ansible-playbook site.yml --tags unattended # unattended-upgrades
 ansible-playbook site.yml --tags fail2ban   # fail2ban sshd jail

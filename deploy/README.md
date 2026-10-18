@@ -51,8 +51,8 @@ timedatectl set-ntp true          # scoring depends on the server clock
 The `deploy` admin account, its SSH key and sudoers entry, the `bia-quiz` service
 account, UFW, Caddy, unattended upgrades and fail2ban are set up by the Ansible playbook
 in §2.5.
-Keep a root/console session open until you have verified SSH as `deploy`. SSH daemon hardening is not
-managed by Ansible; do it **after** §2.5, once key login works.
+Keep a root/console session open until you have verified SSH as `deploy`. The daemon port is managed by
+Ansible in §2.5; root/password authentication hardening is still manual.
 
 ## 2. DNS
 
@@ -129,8 +129,10 @@ pasted into group vars. `deploy` has `sudo: true` for passwordless sudo. Set `bi
 to the public hostname and `bia_app_port` to `8080` (it must match `[server].bind` in
 `bia.toml`); the Caddy role refuses the example domain. If SSH is not on 22, set
 `bia_ssh_port`; the default allowed list follows it (or set
-`bia_ufw_allowed_tcp_ports` explicitly). The preflight refuses to enable UFW if
-`bia_ssh_port` is missing from that list. Set `bia_enable_ufw: false` only if the
+`bia_ufw_allowed_tcp_ports` explicitly). The `sshd` role comments the active `Port` line,
+writes a drop-in config, validates it and restarts SSH. Set `ansible_port` in
+`inventory.yml` to the same value for subsequent runs. The firewall preflight refuses to
+enable UFW if `bia_ssh_port` is missing from the allowed list. Set `bia_enable_ufw: false` only if the
 provider firewall already handles this, and `bia_enable_caddy: false` only if Caddy is
 managed elsewhere. Unattended upgrades are enabled by default and apply Debian stable +
 security updates; set `bia_enable_unattended_upgrades: false` to skip them. The fail2ban
@@ -141,13 +143,13 @@ for every field.
 Verify before closing the root session:
 
 ```sh
-ssh deploy@<server> 'sudo -n true && sudo ufw status && systemctl is-active caddy'
-ssh deploy@<server> "systemctl list-timers 'apt-daily*' --no-pager"
-ssh deploy@<server> 'sudo fail2ban-client status sshd'
+ssh -p <bia_ssh_port> deploy@<server> 'sudo -n true && sudo ufw status && systemctl is-active caddy'
+ssh -p <bia_ssh_port> deploy@<server> "systemctl list-timers 'apt-daily*' --no-pager"
+ssh -p <bia_ssh_port> deploy@<server> 'sudo fail2ban-client status sshd'
 ```
 
-Then switch `ansible_user` to `deploy` for later runs. SSH daemon hardening is not
-managed by Ansible; only after key login works:
+Then switch `ansible_user` to `deploy` and set `ansible_port` to `bia_ssh_port` for later
+runs. Root/password authentication hardening is manual; only after key login works:
 
 ```sh
 sudoedit /etc/ssh/sshd_config   # PermitRootLogin no, PasswordAuthentication no
@@ -186,7 +188,7 @@ rm -rf /tmp/bia-quiz-deploy && mkdir -p /tmp/bia-quiz-deploy
 cp target/release/bia-quiz target/release/bia-import /tmp/bia-quiz-deploy/
 cp deploy/bia-quiz.service deploy/bia.toml.example /tmp/bia-quiz-deploy/
 tar -czf bia-quiz-deploy.tgz -C /tmp/bia-quiz-deploy .
-scp bia-quiz-deploy.tgz deploy@quiz.example.org:/tmp/
+scp -P <bia_ssh_port> bia-quiz-deploy.tgz deploy@quiz.example.org:/tmp/
 ```
 
 On the server:

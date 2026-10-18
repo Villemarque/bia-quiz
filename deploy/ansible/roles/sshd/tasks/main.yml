@@ -1,0 +1,32 @@
+---
+- name: Validate the SSH port
+  ansible.builtin.assert:
+    that:
+      - bia_ssh_port | int >= 1
+      - bia_ssh_port | int <= 65535
+    fail_msg: "bia_ssh_port must be between 1 and 65535."
+  when: bia_manage_ssh_port | bool
+
+- name: Comment active Port directives in sshd_config
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^(\s*Port\s+.*)$'
+    line: '# \1'
+    backrefs: true
+  when: bia_manage_ssh_port | bool
+  notify: Restart SSH
+
+- name: Configure the SSH port
+  ansible.builtin.template:
+    src: port.conf.j2
+    dest: /etc/ssh/sshd_config.d/99-bia-quiz-port.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: bia_manage_ssh_port | bool
+  notify: Restart SSH
+
+- name: Validate the SSH daemon configuration
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+  when: bia_manage_ssh_port | bool

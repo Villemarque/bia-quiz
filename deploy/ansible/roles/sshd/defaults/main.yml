@@ -1,0 +1,4 @@
+---
+bia_manage_ssh_port: true
+# Keep this in sync with bia_ufw_allowed_tcp_ports and the fail2ban jail.
+bia_ssh_port: 22
