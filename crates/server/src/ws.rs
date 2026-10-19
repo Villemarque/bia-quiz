@@ -2,8 +2,11 @@
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
-use axum::response::Response;
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 use bia_core::protocol::{ChapterPick, ClientMsg, ServerMsg};
 use futures_util::{SinkExt, StreamExt};
@@ -11,8 +14,57 @@ use serde::Deserialize;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::db;
-use crate::room::{self, RoomHandle, TeacherCmd};
+use crate::room::{self, ClientTx, RoomHandle, TeacherCmd};
 use crate::AppState;
+
+const MAX_MESSAGE_BYTES: usize = 4 * 1024;
+const MESSAGE_WINDOW: Duration = Duration::from_secs(10);
+const MESSAGE_LIMIT: u32 = 40;
+const IDLE_TIMEOUT: Duration = Duration::from_secs(90);
+const PING_INTERVAL: Duration = Duration::from_secs(30);
+const MAX_WS_CONNECTIONS: usize = 512;
+
+static WS_CONNECTIONS: AtomicUsize = AtomicUsize::new(0);
+
+struct ConnectionGuard;
+
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        WS_CONNECTIONS.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+struct MessageBudget {
+    started: Instant,
+    count: u32,
+}
+
+impl MessageBudget {
+    fn new() -> Self {
+        Self {
+            started: Instant::now(),
+            count: 0,
+        }
+    }
+
+    fn allow(&mut self) -> bool {
+        if self.started.elapsed() >= MESSAGE_WINDOW {
+            self.started = Instant::now();
+            self.count = 0;
+        }
+        self.count += 1;
+        self.count <= MESSAGE_LIMIT
+    }
+}
+
+async fn next_message(
+    stream: &mut futures_util::stream::SplitStream<WebSocket>,
+) -> Option<Message> {
+    match tokio::time::timeout(IDLE_TIMEOUT, stream.next()).await {
+        Ok(Some(Ok(message))) => Some(message),
+        _ => None,
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub struct WsQuery {
@@ -25,21 +77,53 @@ pub async fn ws(
     upgrade: WebSocketUpgrade,
     State(state): State<AppState>,
     Query(query): Query<WsQuery>,
+    headers: HeaderMap,
 ) -> Response {
-    upgrade.on_upgrade(move |socket| handle(socket, state, query))
+    // `/teacher` itself stays public; the control socket is same-origin only.
+    let same_origin = crate::auth::same_origin(&headers, &state.cfg.server.public_base_url);
+    let teacher = query.role.as_deref() == Some("teacher");
+    if (teacher && !same_origin) || (!same_origin && headers.contains_key(header::ORIGIN)) {
+        return (StatusCode::FORBIDDEN, "Origine refusée.").into_response();
+    }
+
+    if WS_CONNECTIONS.fetch_add(1, Ordering::Relaxed) >= MAX_WS_CONNECTIONS {
+        WS_CONNECTIONS.fetch_sub(1, Ordering::Relaxed);
+        return (StatusCode::SERVICE_UNAVAILABLE, "Trop de connexions.").into_response();
+    }
+    let guard = ConnectionGuard;
+
+    upgrade
+        .max_message_size(MAX_MESSAGE_BYTES)
+        .max_frame_size(MAX_MESSAGE_BYTES)
+        .on_upgrade(move |socket| {
+            let _guard = guard;
+            handle(socket, state, query)
+        })
 }
 
 async fn handle(socket: WebSocket, state: AppState, query: WsQuery) {
     let (mut sink, mut stream) = socket.split();
-    let (tx, mut rx) = mpsc::unbounded_channel::<ServerMsg>();
+    let (tx, mut rx) = mpsc::channel::<ServerMsg>(room::CLIENT_QUEUE);
 
     let writer = tokio::spawn(async move {
-        while let Some(message) = rx.recv().await {
-            let Ok(text) = serde_json::to_string(&message) else {
-                continue;
-            };
-            if sink.send(Message::Text(text.into())).await.is_err() {
-                break;
+        let mut ping = tokio::time::interval(PING_INTERVAL);
+        ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tokio::select! {
+                message = rx.recv() => {
+                    let Some(message) = message else { break };
+                    let Ok(text) = serde_json::to_string(&message) else {
+                        continue;
+                    };
+                    if sink.send(Message::Text(text.into())).await.is_err() {
+                        break;
+                    }
+                }
+                _ = ping.tick() => {
+                    if sink.send(Message::Ping(Vec::new().into())).await.is_err() {
+                        break;
+                    }
+                }
             }
         }
     });
@@ -57,7 +141,7 @@ async fn handle(socket: WebSocket, state: AppState, query: WsQuery) {
             .await
         }
         _ => {
-            let _ = tx.send(ServerMsg::Error {
+            let _ = tx.try_send(ServerMsg::Error {
                 message: "Rôle invalide.".into(),
             });
         }
@@ -109,9 +193,9 @@ async fn teacher_loop(
     state: &AppState,
     room_code: Option<&str>,
     stream: &mut futures_util::stream::SplitStream<WebSocket>,
-    tx: &mpsc::UnboundedSender<ServerMsg>,
+    tx: &ClientTx,
 ) {
-    let _ = tx.send(ServerMsg::Hello {
+    let _ = tx.try_send(ServerMsg::Hello {
         role: "teacher".into(),
         server_now: room::now_ms(),
     });
@@ -120,25 +204,32 @@ async fn teacher_loop(
     if let Some(room) = &handle {
         room.attach_teacher(tx.clone());
     }
+    let mut budget = MessageBudget::new();
 
-    while let Some(Ok(message)) = stream.next().await {
+    while let Some(message) = next_message(stream).await {
         let Message::Text(text) = message else {
             if matches!(message, Message::Close(_)) {
                 break;
             }
             continue;
         };
+        if !budget.allow() {
+            let _ = tx.try_send(ServerMsg::Error {
+                message: "Trop de messages.".into(),
+            });
+            break;
+        }
         let client = match parse(&text) {
             Ok(c) => c,
             Err(error) => {
-                let _ = tx.send(error);
+                let _ = tx.try_send(error);
                 continue;
             }
         };
 
         if let ClientMsg::TeacherCreate { chapters, seconds } = client {
             if handle.is_some() {
-                let _ = tx.send(ServerMsg::Error {
+                let _ = tx.try_send(ServerMsg::Error {
                     message: "Une partie est déjà en cours.".into(),
                 });
                 continue;
@@ -146,20 +237,20 @@ async fn teacher_loop(
             match create_room(state, tx, chapters, seconds).await {
                 Ok(room) => handle = Some(room),
                 Err(message) => {
-                    let _ = tx.send(ServerMsg::Error { message });
+                    let _ = tx.try_send(ServerMsg::Error { message });
                 }
             }
             continue;
         }
 
         let Some(command) = teacher_command(client) else {
-            let _ = tx.send(ServerMsg::Error {
+            let _ = tx.try_send(ServerMsg::Error {
                 message: "Message professeur inconnu.".into(),
             });
             continue;
         };
         let Some(room) = &handle else {
-            let _ = tx.send(ServerMsg::Error {
+            let _ = tx.try_send(ServerMsg::Error {
                 message: "Aucune partie en cours.".into(),
             });
             continue;
@@ -170,7 +261,7 @@ async fn teacher_loop(
 
 async fn create_room(
     state: &AppState,
-    tx: &mpsc::UnboundedSender<ServerMsg>,
+    tx: &ClientTx,
     chapters: Vec<ChapterPick>,
     seconds: u32,
 ) -> Result<RoomHandle, String> {
@@ -270,7 +361,7 @@ async fn create_room(
     *guard = Some(room.clone());
     drop(guard);
 
-    let _ = tx.send(ServerMsg::RoomCreated {
+    let _ = tx.try_send(ServerMsg::RoomCreated {
         code,
         join_url,
         available,
@@ -285,39 +376,46 @@ async fn student_loop(
     room_code: Option<&str>,
     token: Option<&str>,
     stream: &mut futures_util::stream::SplitStream<WebSocket>,
-    tx: &mpsc::UnboundedSender<ServerMsg>,
+    tx: &ClientTx,
 ) {
-    let _ = tx.send(ServerMsg::Hello {
+    let _ = tx.try_send(ServerMsg::Hello {
         role: "student".into(),
         server_now: room::now_ms(),
     });
 
     let Some(code) = room_code else {
-        let _ = tx.send(ServerMsg::Error {
+        let _ = tx.try_send(ServerMsg::Error {
             message: "Code de partie manquant.".into(),
         });
         return;
     };
     let Some(room) = active_room(state, Some(code)).await else {
-        let _ = tx.send(ServerMsg::Error {
+        let _ = tx.try_send(ServerMsg::Error {
             message: "Aucune partie avec ce code.".into(),
         });
         return;
     };
 
     let mut player_id: Option<i32> = None;
+    let mut budget = MessageBudget::new();
 
-    while let Some(Ok(message)) = stream.next().await {
+    while let Some(message) = next_message(stream).await {
         let Message::Text(text) = message else {
             if matches!(message, Message::Close(_)) {
                 break;
             }
             continue;
         };
+        if !budget.allow() {
+            let _ = tx.try_send(ServerMsg::Error {
+                message: "Trop de messages.".into(),
+            });
+            break;
+        }
         let client = match parse(&text) {
             Ok(c) => c,
             Err(error) => {
-                let _ = tx.send(error);
+                let _ = tx.try_send(error);
                 continue;
             }
         };
@@ -325,7 +423,7 @@ async fn student_loop(
         match client {
             ClientMsg::StudentJoin { nickname } => {
                 if player_id.is_some() {
-                    let _ = tx.send(ServerMsg::Error {
+                    let _ = tx.try_send(ServerMsg::Error {
                         message: "Vous avez déjà rejoint la partie.".into(),
                     });
                     continue;
@@ -335,11 +433,11 @@ async fn student_loop(
                 match reply.await {
                     Ok(Ok(id)) => player_id = Some(id),
                     Ok(Err(message)) => {
-                        let _ = tx.send(ServerMsg::Error { message });
+                        let _ = tx.try_send(ServerMsg::Error { message });
                         break;
                     }
                     Err(_) => {
-                        let _ = tx.send(ServerMsg::Error {
+                        let _ = tx.try_send(ServerMsg::Error {
                             message: "La partie ne répond plus.".into(),
                         });
                         break;
@@ -349,13 +447,13 @@ async fn student_loop(
             ClientMsg::StudentAnswer { choice } => match player_id {
                 Some(id) => room.answer(id, choice),
                 None => {
-                    let _ = tx.send(ServerMsg::Error {
+                    let _ = tx.try_send(ServerMsg::Error {
                         message: "Rejoignez la partie avant de répondre.".into(),
                     });
                 }
             },
             _ => {
-                let _ = tx.send(ServerMsg::Error {
+                let _ = tx.try_send(ServerMsg::Error {
                     message: "Message élève inconnu.".into(),
                 });
             }

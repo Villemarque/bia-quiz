@@ -13,6 +13,8 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
@@ -109,7 +111,13 @@ async fn full_question_flow() {
     });
 
     let base = format!("ws://{addr}/ws");
-    let (mut teacher, _) = connect_async(format!("{base}?role=teacher")).await.unwrap();
+    let mut request = format!("{base}?role=teacher")
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("origin", HeaderValue::from_static("http://test.local"));
+    let (mut teacher, _) = connect_async(request).await.unwrap();
     assert_eq!(next_json(&mut teacher, "hello").await["type"], "hello");
 
     send(

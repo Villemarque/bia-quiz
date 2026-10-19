@@ -1,7 +1,7 @@
 //! Session authentication with `axum-login` (prof + admin accounts).
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -241,14 +241,17 @@ pub async fn login_submit(
     mut auth: AuthSession,
     Query(query): Query<NextUrl>,
     headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Form(creds): Form<Credentials>,
 ) -> Response {
-    if !same_origin(&headers) {
+    if !same_origin(&headers, &state.cfg.server.public_base_url) {
         return (StatusCode::FORBIDDEN, "Requête refusée.").into_response();
     }
 
-    let key = client_key(&headers, &creds.username);
-    if state.login_limiter.blocked(&key) {
+    let ip_key = client_ip_key(&headers, Some(peer));
+    let key = login_key(&ip_key, &creds.username);
+    let account_key = account_key(&creds.username);
+    if state.login_limiter.blocked(&key) || state.login_limiter.blocked_account(&account_key) {
         return login_html(
             query.next.as_deref(),
             Some("Trop de tentatives. Réessayez dans 15 minutes."),
@@ -260,6 +263,7 @@ pub async fn login_submit(
     match auth.authenticate(creds).await {
         Ok(Some(user)) => {
             state.login_limiter.clear(&key);
+            state.login_limiter.clear(&account_key);
             if auth.login(&user).await.is_err() {
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Session indisponible.")
                     .into_response();
@@ -268,6 +272,7 @@ pub async fn login_submit(
         }
         _ => {
             state.login_limiter.fail(&key);
+            state.login_limiter.fail(&account_key);
             login_html(
                 next.as_deref(),
                 Some("Identifiants incorrects."),
@@ -277,8 +282,12 @@ pub async fn login_submit(
     }
 }
 
-pub async fn logout(mut auth: AuthSession, headers: HeaderMap) -> Response {
-    if !same_origin(&headers) {
+pub async fn logout(
+    State(state): State<AppState>,
+    mut auth: AuthSession,
+    headers: HeaderMap,
+) -> Response {
+    if !same_origin(&headers, &state.cfg.server.public_base_url) {
         return (StatusCode::FORBIDDEN, "Requête refusée.").into_response();
     }
     match auth.logout().await {
@@ -296,32 +305,102 @@ fn safe_next(next: Option<&str>) -> String {
 
 // ---------------------------------------------------------------- CSRF / IP
 
-pub fn same_origin(headers: &HeaderMap) -> bool {
-    if let Some(site) = headers
+/// Lower-cased `scheme://authority` with default ports removed.
+fn origin_of(url: &str) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    let scheme = scheme.to_ascii_lowercase();
+    let authority = rest.split(['/', '?', '#']).next()?.to_ascii_lowercase();
+    if authority.is_empty() {
+        return None;
+    }
+    let authority = match scheme.as_str() {
+        "http" => authority.strip_suffix(":80").unwrap_or(&authority),
+        "https" => authority.strip_suffix(":443").unwrap_or(&authority),
+        _ => &authority,
+    };
+    Some(format!("{scheme}://{authority}"))
+}
+
+/// Strict same-origin check used for logins, admin mutations and teacher sockets.
+///
+/// The reference is `public_base_url` from the config, never the client-supplied
+/// `Host` header. `Origin` must match exactly. Requests without `Origin` are only
+/// accepted when the browser explicitly says `Sec-Fetch-Site: same-origin`/`none`.
+pub fn same_origin(headers: &HeaderMap, public_base_url: &str) -> bool {
+    let expected = match origin_of(public_base_url) {
+        Some(expected) => expected,
+        None => return false,
+    };
+    let site = headers
         .get("sec-fetch-site")
-        .and_then(|value| value.to_str().ok())
-    {
-        if site == "cross-site" {
+        .and_then(|value| value.to_str().ok());
+    if let Some(site) = site {
+        if site != "same-origin" && site != "none" {
             return false;
         }
     }
-    if let (Some(origin), Some(host)) = (
-        headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()),
-        headers.get(header::HOST).and_then(|v| v.to_str().ok()),
-    ) {
-        return origin.ends_with(host);
+    match headers.get(header::ORIGIN) {
+        Some(origin) => origin
+            .to_str()
+            .ok()
+            .and_then(origin_of)
+            .map(|origin| origin == expected)
+            .unwrap_or(false),
+        None => matches!(site, Some("same-origin" | "none")),
     }
-    true
 }
 
-fn client_key(headers: &HeaderMap, username: &str) -> String {
-    let ip = headers
-        .get("x-forwarded-for")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.split(',').next())
-        .map(|value| value.trim())
-        .unwrap_or("unknown");
-    format!("{ip}|{username}")
+/// Client IP. `X-Forwarded-For` is trusted only when the direct peer is loopback
+/// (the Caddy reverse proxy on this host); direct remote peers are always used.
+pub fn client_ip(headers: &HeaderMap, peer: Option<SocketAddr>) -> Option<IpAddr> {
+    let forwarded = || {
+        headers
+            .get("x-forwarded-for")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(',').next())
+            .map(str::trim)
+            .and_then(|value| value.parse::<IpAddr>().ok())
+    };
+    match peer.map(|peer| peer.ip()) {
+        Some(ip) if ip.is_loopback() => forwarded().or(Some(ip)),
+        Some(ip) => Some(ip),
+        None => forwarded(),
+    }
+}
+
+/// Group IPv6 clients by /64 so rotating the host bits cannot bypass a limit.
+fn ip_key(ip: IpAddr) -> String {
+    match ip {
+        IpAddr::V4(ip) => ip.to_string(),
+        IpAddr::V6(ip) => {
+            let segments = ip.segments();
+            Ipv6Addr::new(
+                segments[0],
+                segments[1],
+                segments[2],
+                segments[3],
+                0,
+                0,
+                0,
+                0,
+            )
+            .to_string()
+        }
+    }
+}
+
+fn client_ip_key(headers: &HeaderMap, peer: Option<SocketAddr>) -> String {
+    client_ip(headers, peer)
+        .map(ip_key)
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn login_key(ip_key: &str, username: &str) -> String {
+    format!("{ip_key}|{username}")
+}
+
+fn account_key(username: &str) -> String {
+    format!("account|{username}")
 }
 
 pub struct LoginLimiter {
@@ -339,15 +418,24 @@ impl Default for LoginLimiter {
 impl LoginLimiter {
     const WINDOW: Duration = Duration::from_secs(15 * 60);
     const MAX_FAILURES: u32 = 5;
+    // A per-account lockout is shared by every source IP. Keep it high enough
+    // that an attacker cannot trivially lock the teacher out with five tries.
+    const ACCOUNT_MAX_FAILURES: u32 = 20;
 
     pub fn blocked(&self, key: &str) -> bool {
+        self.blocked_with(key, Self::MAX_FAILURES)
+    }
+
+    pub fn blocked_account(&self, key: &str) -> bool {
+        self.blocked_with(key, Self::ACCOUNT_MAX_FAILURES)
+    }
+
+    fn blocked_with(&self, key: &str, max_failures: u32) -> bool {
         let Ok(attempts) = self.attempts.lock() else {
             return false;
         };
         match attempts.get(key) {
-            Some((started, count)) => {
-                started.elapsed() < Self::WINDOW && *count >= Self::MAX_FAILURES
-            }
+            Some((started, count)) => started.elapsed() < Self::WINDOW && *count >= max_failures,
             None => false,
         }
     }
@@ -356,13 +444,18 @@ impl LoginLimiter {
         let Ok(mut attempts) = self.attempts.lock() else {
             return;
         };
-        let entry = attempts
-            .entry(key.to_string())
-            .or_insert_with(|| (Instant::now(), 0));
-        if entry.0.elapsed() >= Self::WINDOW {
-            *entry = (Instant::now(), 0);
+        {
+            let entry = attempts
+                .entry(key.to_string())
+                .or_insert_with(|| (Instant::now(), 0));
+            if entry.0.elapsed() >= Self::WINDOW {
+                *entry = (Instant::now(), 0);
+            }
+            entry.1 += 1;
         }
-        entry.1 += 1;
+        if attempts.len() > 4096 {
+            attempts.retain(|_, (started, _)| started.elapsed() < Self::WINDOW);
+        }
     }
 
     pub fn clear(&self, key: &str) {
@@ -397,6 +490,10 @@ impl RateLimiter {
             Err(_) => return true,
         };
         let now = Instant::now();
+        if windows.len() > 8192 {
+            windows
+                .retain(|_, (started, _)| now.duration_since(*started) <= Duration::from_secs(60));
+        }
         let entry = windows.entry(key.to_string()).or_insert((now, 0));
         if now.duration_since(entry.0) > Duration::from_secs(60) {
             *entry = (now, 0);
@@ -406,19 +503,8 @@ impl RateLimiter {
     }
 }
 
-fn rate_limit_key(headers: &HeaderMap, extensions: &axum::http::Extensions) -> String {
-    if let Some(forwarded) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-        if let Some(first) = forwarded.split(',').next() {
-            let first = first.trim();
-            if !first.is_empty() {
-                return first.to_string();
-            }
-        }
-    }
-    extensions
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|info| info.0.ip().to_string())
-        .unwrap_or_else(|| "unknown".to_string())
+fn rate_limit_key(headers: &HeaderMap, peer: Option<SocketAddr>) -> String {
+    client_ip_key(headers, peer)
 }
 
 pub async fn rate_limit(State(state): State<AppState>, req: Request, next: Next) -> Response {
@@ -426,7 +512,11 @@ pub async fn rate_limit(State(state): State<AppState>, req: Request, next: Next)
     if path == "/healthz" || path.starts_with("/figures/") || path.starts_with("/assets/") {
         return next.run(req).await;
     }
-    let key = rate_limit_key(req.headers(), req.extensions());
+    let peer = req
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|info| info.0);
+    let key = rate_limit_key(req.headers(), peer);
     if !state.limiter.allow(&key) {
         return (StatusCode::TOO_MANY_REQUESTS, "Trop de requêtes.").into_response();
     }
@@ -508,4 +598,91 @@ a {{ color:#e97770; }}
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::{HeaderName, HeaderValue};
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
+    fn headers(pairs: &[(&'static str, &'static str)]) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        for (name, value) in pairs {
+            headers.insert(
+                HeaderName::from_static(name),
+                HeaderValue::from_static(value),
+            );
+        }
+        headers
+    }
+
+    #[test]
+    fn same_origin_requires_an_exact_match() {
+        let base = "https://quiz.example";
+        assert!(same_origin(
+            &headers(&[("origin", "https://quiz.example")]),
+            base
+        ));
+        assert!(same_origin(
+            &headers(&[("origin", "https://quiz.example:443")]),
+            base
+        ));
+        assert!(!same_origin(
+            &headers(&[("origin", "https://evilquiz.example")]),
+            base
+        ));
+        assert!(!same_origin(
+            &headers(&[("origin", "https://quiz.example.evil.test")]),
+            base
+        ));
+        assert!(!same_origin(&headers(&[]), base));
+        assert!(!same_origin(&headers(&[("origin", "null")]), base));
+    }
+
+    #[test]
+    fn same_origin_rejects_cross_site_fetch_metadata() {
+        assert!(!same_origin(
+            &headers(&[
+                ("origin", "https://quiz.example"),
+                ("sec-fetch-site", "same-site")
+            ]),
+            "https://quiz.example"
+        ));
+        assert!(same_origin(
+            &headers(&[
+                ("origin", "https://quiz.example"),
+                ("sec-fetch-site", "same-origin")
+            ]),
+            "https://quiz.example"
+        ));
+    }
+
+    #[test]
+    fn forwarded_for_is_only_trusted_from_loopback() {
+        let loopback: SocketAddr = "127.0.0.1:5000".parse().unwrap();
+        let remote: SocketAddr = "198.51.100.9:5000".parse().unwrap();
+        let headers = headers(&[("x-forwarded-for", "203.0.113.5, 127.0.0.1")]);
+        assert_eq!(
+            client_ip(&headers, Some(loopback)),
+            Some(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 5)))
+        );
+        assert_eq!(
+            client_ip(&headers, Some(remote)),
+            Some(IpAddr::V4(Ipv4Addr::new(198, 51, 100, 9)))
+        );
+        assert_eq!(
+            client_ip(&headers, None),
+            Some(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 5)))
+        );
+    }
+
+    #[test]
+    fn ipv6_is_keyed_by_64() {
+        let one: Ipv6Addr = "2001:db8:1:2:aaaa::1".parse().unwrap();
+        let two: Ipv6Addr = "2001:db8:1:2:bbbb::2".parse().unwrap();
+        let other: Ipv6Addr = "2001:db8:1:3::1".parse().unwrap();
+        assert_eq!(ip_key(IpAddr::V6(one)), ip_key(IpAddr::V6(two)));
+        assert_ne!(ip_key(IpAddr::V6(one)), ip_key(IpAddr::V6(other)));
+    }
 }

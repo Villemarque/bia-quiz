@@ -12,8 +12,10 @@ pub mod ws;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use axum::extract::DefaultBodyLimit;
+use axum::extract::{DefaultBodyLimit, Request};
+use axum::http::{header, HeaderValue};
 use axum::middleware;
+use axum::response::Response;
 use axum::routing::{get, post};
 use axum::Router;
 use time::Duration as TimeDuration;
@@ -52,6 +54,43 @@ impl AppState {
         *self.figures.write().expect("figure cache lock") = map;
         Ok(count)
     }
+}
+
+const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; base-uri 'none'; object-src 'none'; \
+frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self'; \
+style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:";
+
+async fn security_headers(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    request: Request,
+    next: middleware::Next,
+) -> Response {
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("same-origin"),
+    );
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(CONTENT_SECURITY_POLICY),
+    );
+    headers.insert(
+        header::HeaderName::from_static("permissions-policy"),
+        HeaderValue::from_static("camera=(), microphone=(), geolocation=()"),
+    );
+    if state.cfg.secure_cookies() {
+        headers.insert(
+            header::STRICT_TRANSPORT_SECURITY,
+            HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        );
+    }
+    response
 }
 
 pub fn router(state: AppState) -> Router {
@@ -99,6 +138,10 @@ pub fn router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::rate_limit,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            security_headers,
         ))
         .layer(auth_layer)
         .with_state(state)

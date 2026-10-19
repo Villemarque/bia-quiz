@@ -150,7 +150,7 @@ async fn start_import(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Response {
-    if !crate::auth::same_origin(&headers) {
+    if !crate::auth::same_origin(&headers, &state.cfg.server.public_base_url) {
         return (StatusCode::FORBIDDEN, "Requête refusée.").into_response();
     }
     if room_is_live(&state).await {

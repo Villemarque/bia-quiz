@@ -14,6 +14,11 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::db::{self, Db};
 
+/// Messages sent to one client. Bounded so a slow socket cannot grow memory.
+pub type ClientTx = mpsc::Sender<ServerMsg>;
+pub const CLIENT_QUEUE: usize = 64;
+const ROOM_QUEUE: usize = 256;
+
 pub fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -33,10 +38,10 @@ pub enum TeacherCmd {
 }
 
 pub enum Cmd {
-    TeacherAttach(mpsc::UnboundedSender<ServerMsg>),
+    TeacherAttach(ClientTx),
     Teacher(TeacherCmd),
     StudentJoin {
-        tx: mpsc::UnboundedSender<ServerMsg>,
+        tx: ClientTx,
         token: Option<String>,
         nickname: String,
         reply: oneshot::Sender<Result<i32, String>>,
@@ -56,7 +61,7 @@ pub enum Cmd {
 #[derive(Clone)]
 pub struct RoomHandle {
     pub code: String,
-    tx: mpsc::UnboundedSender<Cmd>,
+    tx: mpsc::Sender<Cmd>,
 }
 
 impl RoomHandle {
@@ -64,22 +69,22 @@ impl RoomHandle {
         !self.tx.is_closed()
     }
 
-    pub fn attach_teacher(&self, tx: mpsc::UnboundedSender<ServerMsg>) {
-        let _ = self.tx.send(Cmd::TeacherAttach(tx));
+    pub fn attach_teacher(&self, tx: ClientTx) {
+        let _ = self.tx.try_send(Cmd::TeacherAttach(tx));
     }
 
     pub fn teacher(&self, cmd: TeacherCmd) {
-        let _ = self.tx.send(Cmd::Teacher(cmd));
+        let _ = self.tx.try_send(Cmd::Teacher(cmd));
     }
 
     pub fn join_student(
         &self,
-        tx: mpsc::UnboundedSender<ServerMsg>,
+        tx: ClientTx,
         token: Option<String>,
         nickname: String,
     ) -> oneshot::Receiver<Result<i32, String>> {
         let (reply, rx) = oneshot::channel();
-        let _ = self.tx.send(Cmd::StudentJoin {
+        let _ = self.tx.try_send(Cmd::StudentJoin {
             tx,
             token,
             nickname,
@@ -89,11 +94,11 @@ impl RoomHandle {
     }
 
     pub fn answer(&self, player_id: i32, choice: usize) {
-        let _ = self.tx.send(Cmd::Answer { player_id, choice });
+        let _ = self.tx.try_send(Cmd::Answer { player_id, choice });
     }
 
     pub fn detach_student(&self, player_id: i32) {
-        let _ = self.tx.send(Cmd::StudentDetach { player_id });
+        let _ = self.tx.try_send(Cmd::StudentDetach { player_id });
     }
 }
 
@@ -128,15 +133,15 @@ struct Room {
     answers: HashMap<(usize, i32), AnswerState>,
     players: HashMap<i32, PlayerState>,
     current_sq: Option<i32>,
-    teacher_tx: Option<mpsc::UnboundedSender<ServerMsg>>,
-    student_txs: HashMap<i32, mpsc::UnboundedSender<ServerMsg>>,
-    cmd_tx: mpsc::UnboundedSender<Cmd>,
+    teacher_tx: Option<ClientTx>,
+    student_txs: HashMap<i32, ClientTx>,
+    cmd_tx: mpsc::Sender<Cmd>,
     generation: u64,
     closed: bool,
 }
 
-pub fn spawn(spec: RoomSpec, teacher_tx: mpsc::UnboundedSender<ServerMsg>) -> RoomHandle {
-    let (tx, rx) = mpsc::unbounded_channel();
+pub fn spawn(spec: RoomSpec, teacher_tx: ClientTx) -> RoomHandle {
+    let (tx, rx) = mpsc::channel(ROOM_QUEUE);
     let handle = RoomHandle {
         code: spec.code.clone(),
         tx: tx.clone(),
@@ -168,7 +173,7 @@ pub fn spawn(spec: RoomSpec, teacher_tx: mpsc::UnboundedSender<ServerMsg>) -> Ro
 }
 
 impl Room {
-    async fn run(mut self, mut rx: mpsc::UnboundedReceiver<Cmd>) {
+    async fn run(mut self, mut rx: mpsc::Receiver<Cmd>) {
         while let Some(cmd) = rx.recv().await {
             match cmd {
                 Cmd::TeacherAttach(tx) => {
@@ -197,7 +202,7 @@ impl Room {
                 Cmd::Answer { player_id, choice } => {
                     if let Err(message) = self.answer(player_id, choice).await {
                         if let Some(tx) = self.student_txs.get(&player_id) {
-                            let _ = tx.send(ServerMsg::Error { message });
+                            let _ = tx.try_send(ServerMsg::Error { message });
                         }
                     }
                 }
@@ -334,7 +339,7 @@ impl Room {
                 .get(&(position, *player_id))
                 .map(|a| a.is_correct)
                 .unwrap_or(false);
-            let _ = tx.send(ServerMsg::QuestionResult { correct });
+            let _ = tx.try_send(ServerMsg::QuestionResult { correct });
         }
         self.schedule(2_500);
     }
@@ -409,7 +414,7 @@ impl Room {
                 .iter()
                 .position(|s| s.nickname == me.nickname)
                 .map(|i| i + 1);
-            let _ = tx.send(ServerMsg::SessionEnd {
+            let _ = tx.try_send(ServerMsg::SessionEnd {
                 podium: podium.clone(),
                 top: top.clone(),
                 my_rank: rank,
@@ -424,7 +429,7 @@ impl Room {
 
     async fn join_student(
         &mut self,
-        tx: mpsc::UnboundedSender<ServerMsg>,
+        tx: ClientTx,
         token: Option<String>,
         nickname: String,
     ) -> Result<i32, String> {
@@ -435,11 +440,11 @@ impl Room {
         if let Some(existing_id) = token.as_deref().and_then(|t| self.by_token(t)) {
             self.student_txs.insert(existing_id, tx.clone());
             let me = &self.players[&existing_id];
-            let _ = tx.send(ServerMsg::PlayerWelcome {
+            let _ = tx.try_send(ServerMsg::PlayerWelcome {
                 token: me.token.clone(),
                 player_id: existing_id,
             });
-            let _ = tx.send(ServerMsg::RoomState {
+            let _ = tx.try_send(ServerMsg::RoomState {
                 phase: self.phase,
                 code: self.code.clone(),
                 player_count: self.players.len(),
@@ -451,7 +456,7 @@ impl Room {
                     self.send_question_to(&tx, &question, index);
                 }
                 if let Some(remaining) = self.paused_remaining {
-                    let _ = tx.send(ServerMsg::Paused {
+                    let _ = tx.try_send(ServerMsg::Paused {
                         paused: true,
                         remaining_ms: Some(remaining),
                     });
@@ -482,11 +487,11 @@ impl Room {
         );
         self.student_txs.insert(id, tx.clone());
 
-        let _ = tx.send(ServerMsg::PlayerWelcome {
+        let _ = tx.try_send(ServerMsg::PlayerWelcome {
             token,
             player_id: id,
         });
-        let _ = tx.send(ServerMsg::RoomState {
+        let _ = tx.try_send(ServerMsg::RoomState {
             phase: self.phase,
             code: self.code.clone(),
             player_count: self.players.len(),
@@ -596,7 +601,7 @@ impl Room {
         );
 
         if let Some(tx) = self.student_txs.get(&player_id) {
-            let _ = tx.send(ServerMsg::AnswerSaved { choice });
+            let _ = tx.try_send(ServerMsg::AnswerSaved { choice });
         }
         let count = self
             .answers
@@ -653,7 +658,7 @@ impl Room {
         let message = self.question_start(question, index);
         self.send_teacher(message.clone());
         for tx in self.student_txs.values() {
-            let _ = tx.send(message.clone());
+            let _ = tx.try_send(message.clone());
         }
     }
 
@@ -661,18 +666,13 @@ impl Room {
         self.send_teacher(self.question_start(question, index));
     }
 
-    fn send_question_to(
-        &self,
-        tx: &mpsc::UnboundedSender<ServerMsg>,
-        question: &Question,
-        index: usize,
-    ) {
-        let _ = tx.send(self.question_start(question, index));
+    fn send_question_to(&self, tx: &ClientTx, question: &Question, index: usize) {
+        let _ = tx.try_send(self.question_start(question, index));
     }
 
     fn send_teacher(&self, message: ServerMsg) {
         if let Some(tx) = &self.teacher_tx {
-            let _ = tx.send(message);
+            let _ = tx.try_send(message);
         }
     }
 
@@ -688,7 +688,7 @@ impl Room {
             remaining_ms,
         });
         for tx in self.student_txs.values() {
-            let _ = tx.send(ServerMsg::Paused {
+            let _ = tx.try_send(ServerMsg::Paused {
                 paused,
                 remaining_ms,
             });
@@ -705,7 +705,7 @@ impl Room {
                     points: p.points,
                 })
                 .collect();
-            let _ = tx.send(ServerMsg::RoomState {
+            let _ = tx.try_send(ServerMsg::RoomState {
                 phase: self.phase,
                 code: self.code.clone(),
                 player_count: self.players.len(),
@@ -717,7 +717,7 @@ impl Room {
     fn send_room_state_all(&self) {
         self.send_room_state_teacher();
         for tx in self.student_txs.values() {
-            let _ = tx.send(ServerMsg::RoomState {
+            let _ = tx.try_send(ServerMsg::RoomState {
                 phase: self.phase,
                 code: self.code.clone(),
                 player_count: self.players.len(),
@@ -732,7 +732,7 @@ impl Room {
         let tx = self.cmd_tx.clone();
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms.max(0) as u64)).await;
-            let _ = tx.send(Cmd::Timer { generation });
+            let _ = tx.send(Cmd::Timer { generation }).await;
         });
     }
 }
@@ -741,7 +741,7 @@ fn sanitize_nickname(raw: &str) -> String {
     let cleaned: String = raw
         .trim()
         .chars()
-        .filter(|c| !c.is_control())
+        .filter(|c| !c.is_control() && !is_invisible(*c))
         .take(24)
         .collect();
     if cleaned.is_empty() {
@@ -749,6 +749,18 @@ fn sanitize_nickname(raw: &str) -> String {
     } else {
         cleaned
     }
+}
+
+/// Zero-width and bidi-override characters used to spoof or hide names.
+fn is_invisible(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{206F}'
+            | '\u{FEFF}'
+    )
 }
 
 fn new_token() -> String {

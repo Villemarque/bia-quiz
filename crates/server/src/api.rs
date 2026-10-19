@@ -128,7 +128,7 @@ pub async fn prof_session_csv(
     }
     for row in &answers {
         let _ = writer.write_record([
-            row.nickname.clone(),
+            csv_safe(&row.nickname),
             row.position.to_string(),
             row.choice_idx.to_string(),
             row.is_correct.to_string(),
@@ -153,6 +153,26 @@ pub async fn prof_session_csv(
     response
 }
 
+/// Neutralise spreadsheet formulas in student-controlled fields.
+fn csv_safe(value: &str) -> String {
+    match value.chars().next() {
+        Some('=' | '+' | '-' | '@' | '\t' | '\r') => format!("'{value}"),
+        _ => value.to_string(),
+    }
+}
+
 pub async fn not_found() -> Response {
     (StatusCode::NOT_FOUND, "Route inconnue.").into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::csv_safe;
+
+    #[test]
+    fn csv_formulas_are_neutralised() {
+        assert_eq!(csv_safe("=1+1"), "'=1+1");
+        assert_eq!(csv_safe("@SUM(A1)"), "'@SUM(A1)");
+        assert_eq!(csv_safe("Max"), "Max");
+    }
 }
