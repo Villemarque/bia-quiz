@@ -21,6 +21,8 @@ pub struct ServerConfig {
     pub bind: String,
     pub public_base_url: String,
     pub max_players: usize,
+    /// Number of characters in a room code.
+    pub join_code_length: usize,
     /// Public URL of the deployed source (AGPL network-use obligation).
     pub source_url: String,
 }
@@ -82,6 +84,7 @@ impl Default for ServerConfig {
             bind: "127.0.0.1:8080".into(),
             public_base_url: "http://localhost:8080".into(),
             max_players: 60,
+            join_code_length: 3,
             source_url: "https://github.com/Villemarque/bia-quiz".into(),
         }
     }
@@ -144,6 +147,9 @@ impl Config {
         if let Some(v) = env("BIA_QUIZ_SOURCE_URL") {
             cfg.server.source_url = v;
         }
+        if let Some(v) = env("BIA_QUIZ_JOIN_CODE_LENGTH") {
+            cfg.server.join_code_length = v.parse()?;
+        }
         if let Some(v) = env("BIA_QUIZ_DB_PATH") {
             cfg.db.path = v.into();
         }
@@ -167,6 +173,10 @@ impl Config {
         }
         if let Some(v) = env("BIA_QUIZ_RATE") {
             cfg.limits.requests_per_ip_per_minute = v.parse()?;
+        }
+
+        if !(1..=64).contains(&cfg.server.join_code_length) {
+            anyhow::bail!("server.join_code_length must be between 1 and 64");
         }
 
         cfg.server.public_base_url = cfg.server.public_base_url.trim_end_matches('/').to_string();

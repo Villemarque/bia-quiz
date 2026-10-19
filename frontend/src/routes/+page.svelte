@@ -1,7 +1,18 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { goto } from '$lib/shim/navigation';
+  import { fetchMeta } from '$lib/api';
 
   let code = $state('');
+  let codeLength = $state(3);
+
+  onMount(() => {
+    fetchMeta()
+      .then((meta) => {
+        codeLength = meta.join_code_length || 3;
+      })
+      .catch(() => {});
+  });
 
   function join(event: SubmitEvent): void {
     event.preventDefault();
@@ -10,11 +21,11 @@
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, '')
       .slice(0, 6);
-    if (clean.length >= 4) void goto(`/j/${clean}`);
+    if (clean.length === codeLength) void goto(`/j/${clean}`);
   }
 </script>
 
-<main class="landing">
+<main class="landing joy-bg">
   <div class="landing-inner">
     <div class="brand"><span class="brand-mark">✈</span> BIA · Triple A</div>
 
@@ -28,7 +39,7 @@
         <input
           class="code-input"
           bind:value={code}
-          maxlength="6"
+          maxlength={codeLength}
           autocomplete="off"
           autocapitalize="characters"
           placeholder="CODE"
@@ -36,7 +47,8 @@
         />
         <button class="btn btn-primary" type="submit">Rejoindre</button>
         <p class="small muted">
-          Scannez le QR code affiché par le professeur, ou saisissez le code à 6 caractères.
+          Scannez le QR code affiché par le professeur, ou saisissez le code à {codeLength}
+          caractère{codeLength > 1 ? 's' : ''}.
         </p>
       </form>
 

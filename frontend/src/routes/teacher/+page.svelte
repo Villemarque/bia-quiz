@@ -17,6 +17,7 @@
   let qr = $state('');
   let loadError = $state('');
   let settled = $state(false);
+  let copied = $state(false);
 
   type PickItem = {
     key: string;
@@ -135,7 +136,7 @@
         count: Math.max(0, Math.floor(Number(picks[item.key]) || 0)),
       }))
       .filter((pick) => pick.count > 0);
-    if (choices.length === 0 || totalPicked > 50) return;
+    if (choices.length === 0) return;
     client.create(choices, Number(seconds));
   }
 
@@ -143,9 +144,29 @@
     writeSession('bia-room', '');
     location.assign('/teacher');
   }
+
+  async function copyJoinUrl(): Promise<void> {
+    const url = client.joinUrl;
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Fallback for browsers without the async clipboard API.
+      const area = document.createElement('textarea');
+      area.value = url;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+    }
+    copied = true;
+    window.setTimeout(() => (copied = false), 2000);
+  }
 </script>
 
-<main class="teacher">
+<main class="teacher joy-bg">
   <header class="teacher-bar">
     <span class="brand"><span class="brand-mark">✈</span> Quiz BIA</span>
     <span class="spacer"></span>
@@ -298,7 +319,7 @@
                         <input
                           type="number"
                           min="1"
-                          max={Math.min(50, item.available)}
+                          max={item.available}
                           step="1"
                           aria-label={`Nombre de questions pour ${item.label}`}
                           bind:value={picks[item.key]}
@@ -317,7 +338,6 @@
           <span class="pill">
             Total : {totalPicked} question{totalPicked > 1 ? 's' : ''}
           </span>
-          <span class="muted small">Maximum 50</span>
           <span class="spacer"></span>
           <label class="field">
             Secondes
@@ -327,16 +347,12 @@
 
         {#if selected.length > 0 && totalPicked === 0}
           <p class="muted small">Indiquez au moins une question.</p>
-        {:else if totalPicked > 50}
-          <div class="notice">
-            Maximum 50 questions par partie ({totalPicked} demandées).
-          </div>
         {/if}
 
         <div>
           <button
             class="btn btn-primary"
-            disabled={selected.length === 0 || totalPicked < 1 || totalPicked > 50}
+            disabled={selected.length === 0 || totalPicked < 1}
             onclick={create}
           >
             Créer la partie
@@ -346,8 +362,13 @@
     {:else if client.roomSeen}
       <div class="lobby-grid">
         <div class="stack" style="align-items:flex-start">
-          <p class="muted">Rejoindre sur</p>
-          <p class="mono" style="overflow-wrap:anywhere">{client.joinUrl}</p>
+          <div class="join-link-card">
+            <p class="join-link-label">Rejoindre sur</p>
+            <p class="join-url mono">{client.joinUrl}</p>
+            <button class="btn btn-primary join-copy" onclick={copyJoinUrl} aria-live="polite">
+              {copied ? 'Lien copié !' : 'Copier le lien'}
+            </button>
+          </div>
           <div class="code-big">{client.code}</div>
           {#if qr}
             <img class="qr" src={qr} alt="QR code pour rejoindre la partie" />

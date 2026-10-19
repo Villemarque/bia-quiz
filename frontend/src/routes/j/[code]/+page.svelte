@@ -44,7 +44,7 @@
   );
 </script>
 
-<main class="student">
+<main class="student joy-bg">
   <header class="student-top">
     <span class="brand"><span class="brand-mark">✈</span> Quiz BIA</span>
     <span class="spacer"></span>

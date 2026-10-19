@@ -39,6 +39,7 @@ pub async fn meta(State(state): State<AppState>) -> Response {
     };
     Json(serde_json::json!({
         "source_url": source_url,
+        "join_code_length": state.cfg.server.join_code_length,
         "version": env!("CARGO_PKG_VERSION"),
         "commit": commit,
         "commit_url": commit_url,

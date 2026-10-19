@@ -310,6 +310,7 @@ sudo -u bia-quiz test -w /var/lib/bia-quiz && echo "state writable"
 [server]
 bind = "127.0.0.1:8080"
 public_base_url = "https://quiz.asso-triple-a.org"   # QR codes + secure cookies
+join_code_length = 3                                # alphanumeric room code
 source_url = "https://github.com/Villemarque/bia-quiz"  # AGPL network-use obligation
 
 [db]

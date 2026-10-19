@@ -2,6 +2,8 @@
 bind = "127.0.0.1:8080"
 public_base_url = "https://quiz.asso-triple-a.org"
 max_players = 60
+# Room code length (alphanumeric, default 3).
+join_code_length = 3
 # Public URL of the deployed source (AGPL-3.0 network-use obligation).
 source_url = "https://github.com/Villemarque/bia-quiz"
 

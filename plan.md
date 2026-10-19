@@ -72,7 +72,7 @@ multi-school hosting · Postgres · question editor UI · sound.
 | 26 | Final screen | **Top-3 podium + top-7 list + each student's own result** |
 | 27 | Join flow | `/` landing page → `/j/<code>`, plus **QR code + room code** on the projector |
 | 28 | Late joins | **Allowed mid-question**; missed questions score 0; reconnecting keeps points via a localStorage token |
-| 29 | Session setup | **Multi-chapter selection with a question count per chapter** (default 10 each; 50 total max), seconds per question (default 30; a per-question TSV value wins) |
+| 29 | Session setup | **Multi-chapter selection with a question count per chapter** (default 10 each; no total cap), seconds per question (default 30; a per-question TSV value wins) |
 | 30 | Draw rule | Random **within each chosen chapter**, up to its count, **no repeat inside a session** |
 | 31 | Question wording | `content_fixed` when present, otherwise `content_verbatim` |
 | 32 | Language | Docs and comments **English**; UI strings **French** |
@@ -127,8 +127,8 @@ clock offset measured on connect, so phone clock drift cannot affect scoring.
 
 - Subjects: Aéronefs, Mécanique du vol, Météo, Navigation, Histoire, Anglais.
 - Inside each subject: its chapters, plus a `Sans chapitre` item when that subject has
-  chapterless questions. Each selected item gets its own count (default **10**); the
-  total is capped at **50**.
+  chapterless questions. Each selected item gets its own count (default **10**); there
+  is no total cap.
 - Seconds per question: session fallback **30**; a question's optional `seconds` value wins.
 - Start → a room code and QR code appear on the projector.
 
@@ -908,6 +908,7 @@ no Docker, no asset folder required at runtime.
 bind = "127.0.0.1:8080"
 public_base_url = "https://quiz.asso-triple-a.org"   # used to build the join URL / QR
 max_players = 60
+join_code_length = 3                                # alphanumeric room code (default 3)
 
 [db]
 path = "/var/lib/bia-quiz/bia.sqlite3"

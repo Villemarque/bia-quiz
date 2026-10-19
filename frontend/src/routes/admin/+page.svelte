@@ -75,7 +75,7 @@
   const running = $derived(job?.state === 'downloading' || job?.state === 'importing');
 </script>
 
-<main class="prof">
+<main class="prof joy-bg">
   <div class="row">
     <div>
       <h1>Administration</h1>
@@ -85,11 +85,11 @@
       </p>
     </div>
     <span class="spacer"></span>
-    <a class="btn btn-ghost" style="color:var(--navy);border-color:var(--line)" href="/prof">
+    <a class="btn btn-ghost" href="/prof">
       Résultats
     </a>
     <form method="post" action="/logout">
-      <button class="btn btn-ghost" style="color:var(--navy);border-color:var(--line)">
+      <button class="btn btn-ghost">
         Déconnexion
       </button>
     </form>

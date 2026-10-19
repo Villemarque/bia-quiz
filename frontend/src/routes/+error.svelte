@@ -5,7 +5,7 @@
   }: { status?: number; error?: string } = $props();
 </script>
 
-<main class="center">
+<main class="center joy-bg">
   <div class="stack" style="max-width: 40ch; align-items: center">
     <p class="big-rank">{status}</p>
     <p>{error}</p>

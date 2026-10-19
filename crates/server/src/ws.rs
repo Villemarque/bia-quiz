@@ -172,11 +172,11 @@ fn teacher_command(message: ClientMsg) -> Option<TeacherCmd> {
     }
 }
 
-fn new_code() -> String {
+fn new_code(length: usize) -> String {
     use rand::Rng;
     const ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let mut rng = rand::thread_rng();
-    (0..6)
+    (0..length.max(1))
         .map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char)
         .collect()
 }
@@ -278,9 +278,6 @@ async fn create_room(
                 return Err("Chapitre invalide.".into());
             }
         }
-        if pick.count > 50 {
-            return Err("Le nombre de questions par sélection doit être entre 1 et 50.".into());
-        }
         let entry = merged.entry((pick.subject, pick.chapter)).or_default();
         *entry = entry.saturating_add(pick.count);
     }
@@ -288,8 +285,8 @@ async fn create_room(
         return Err("Choisissez au moins une sélection.".into());
     }
     let requested: u64 = merged.values().map(|count| u64::from(*count)).sum();
-    if requested == 0 || requested > 50 {
-        return Err("Le nombre total de questions doit être entre 1 et 50.".into());
+    if requested == 0 {
+        return Err("Choisissez au moins une question.".into());
     }
     if !(5..=120).contains(&seconds) {
         return Err("La durée doit être entre 5 et 120 secondes.".into());
@@ -320,7 +317,7 @@ async fn create_room(
     let chapter_ids = db::chapter_ids(&state.db, &chapter_numbers)
         .await
         .map_err(|e| e.to_string())?;
-    let code = new_code();
+    let code = new_code(state.cfg.server.join_code_length);
     let session_id = db::create_session(
         &state.db,
         db::NewSessionData {
@@ -462,5 +459,19 @@ async fn student_loop(
 
     if let Some(id) = player_id {
         room.detach_student(id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::new_code;
+
+    #[test]
+    fn codes_are_alphanumeric_with_the_configured_length() {
+        for length in [1, 3, 6, 12] {
+            let code = new_code(length);
+            assert_eq!(code.len(), length);
+            assert!(code.chars().all(|c| c.is_ascii_alphanumeric()));
+        }
     }
 }

@@ -66,7 +66,7 @@
   }
 </script>
 
-<main class="prof">
+<main class="prof joy-bg">
   <div class="row">
     <div>
       <h1>Résultats des parties</h1>
@@ -76,15 +76,15 @@
     </div>
     <span class="spacer"></span>
     {#if me?.role === 'admin'}
-      <a class="btn btn-ghost" style="color:var(--navy);border-color:var(--line)" href="/admin">
+      <a class="btn btn-ghost" href="/admin">
         Administration
       </a>
     {/if}
-    <button class="btn btn-ghost" style="color:var(--navy);border-color:var(--line)" onclick={() => void load()}>
+    <button class="btn btn-ghost" onclick={() => void load()}>
       Rafraîchir
     </button>
     <form method="post" action="/logout">
-      <button class="btn btn-ghost" style="color:var(--navy);border-color:var(--line)">
+      <button class="btn btn-ghost">
         Déconnexion
       </button>
     </form>
@@ -139,7 +139,7 @@
       <div class="row">
         <h2>Partie {detail.session.code}</h2>
         <span class="spacer"></span>
-        <a class="btn btn-ghost" style="color:var(--navy); border-color:var(--line)" href={`/api/prof/sessions/${detail.session.id}/export.csv`}>
+        <a class="btn btn-ghost" href={`/api/prof/sessions/${detail.session.id}/export.csv`}>
           Exporter en CSV
         </a>
       </div>

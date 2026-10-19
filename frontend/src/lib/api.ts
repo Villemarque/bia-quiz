@@ -23,6 +23,7 @@ export async function fetchCatalog(): Promise<SubjectCatalog[]> {
 
 export interface Meta {
   source_url: string;
+  join_code_length: number;
   version: string;
   commit: string;
   commit_url: string | null;

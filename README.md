@@ -104,6 +104,7 @@ an environment variable:
 | `server.bind` | `BIA_QUIZ_BIND` | `127.0.0.1:8080` |
 | `server.public_base_url` | `BIA_QUIZ_PUBLIC_BASE_URL` | `http://localhost:8080` |
 | `server.max_players` | `BIA_QUIZ_MAX_PLAYERS` | `60` |
+| `server.join_code_length` | `BIA_QUIZ_JOIN_CODE_LENGTH` | `3` |
 | `server.source_url` | `BIA_QUIZ_SOURCE_URL` | `https://github.com/Villemarque/bia-quiz` (AGPL footer link) |
 | `db.path` | `BIA_QUIZ_DB_PATH` | `bia.sqlite3` |
 | `auth.session_hours` | `BIA_QUIZ_SESSION_HOURS` | `12` |
