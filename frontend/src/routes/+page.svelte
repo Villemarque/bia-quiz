@@ -19,7 +19,7 @@
     const clean = code
       .trim()
       .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '')
+      .replace(/[^0-9]/g, '')
       .slice(0, 6);
     if (clean.length === codeLength) void goto(`/j/${clean}`);
   }
@@ -40,15 +40,16 @@
           class="code-input"
           bind:value={code}
           maxlength={codeLength}
+          inputmode="numeric"
+          pattern="[0-9]*"
           autocomplete="off"
-          autocapitalize="characters"
-          placeholder="CODE"
+          placeholder={'0'.repeat(codeLength)}
           aria-label="Code de la partie"
         />
         <button class="btn btn-primary" type="submit">Rejoindre</button>
         <p class="small muted">
           Scannez le QR code affiché par le professeur, ou saisissez le code à {codeLength}
-          caractère{codeLength > 1 ? 's' : ''}.
+          chiffre{codeLength > 1 ? 's' : ''}.
         </p>
       </form>
 

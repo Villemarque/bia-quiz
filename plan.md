@@ -908,7 +908,7 @@ no Docker, no asset folder required at runtime.
 bind = "127.0.0.1:8080"
 public_base_url = "https://quiz.asso-triple-a.org"   # used to build the join URL / QR
 max_players = 60
-join_code_length = 3                                # alphanumeric room code (default 3)
+join_code_length = 3                                # numeric room code (default 3)
 
 [db]
 path = "/var/lib/bia-quiz/bia.sqlite3"

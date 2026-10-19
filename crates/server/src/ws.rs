@@ -174,7 +174,7 @@ fn teacher_command(message: ClientMsg) -> Option<TeacherCmd> {
 
 fn new_code(length: usize) -> String {
     use rand::Rng;
-    const ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const ALPHABET: &[u8] = b"0123456789";
     let mut rng = rand::thread_rng();
     (0..length.max(1))
         .map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char)
@@ -467,11 +467,11 @@ mod tests {
     use super::new_code;
 
     #[test]
-    fn codes_are_alphanumeric_with_the_configured_length() {
+    fn codes_are_numeric_with_the_configured_length() {
         for length in [1, 3, 6, 12] {
             let code = new_code(length);
             assert_eq!(code.len(), length);
-            assert!(code.chars().all(|c| c.is_ascii_alphanumeric()));
+            assert!(code.chars().all(|c| c.is_ascii_digit()));
         }
     }
 }
