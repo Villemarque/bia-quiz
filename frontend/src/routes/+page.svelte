@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$lib/shim/navigation';
-  import { fetchMeta } from '$lib/api';
+  import { fetchMeta, fetchRoom, type RoomStatus } from '$lib/api';
 
   let code = $state('');
   let codeLength = $state(3);
+  let liveRoom = $state<RoomStatus | null>(null);
 
   onMount(() => {
     fetchMeta()
@@ -12,6 +13,29 @@
         codeLength = meta.join_code_length || 3;
       })
       .catch(() => {});
+
+    let stopped = false;
+    const refreshRoom = () =>
+      fetchRoom()
+        .then((status) => {
+          if (!stopped) liveRoom = status.live && status.code ? status : null;
+        })
+        .catch(() => {});
+    void refreshRoom();
+
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshRoom();
+    }, 15_000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void refreshRoom();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   });
 
   function join(event: SubmitEvent): void {
@@ -32,6 +56,19 @@
     <div>
       <h1>Quiz BIA</h1>
     </div>
+
+    {#if liveRoom && liveRoom.code}
+      <div class="live-room">
+        <span class="live-dot" aria-hidden="true"></span>
+        <div class="live-room-copy">
+          <p class="live-room-label">Partie en cours</p>
+          <p class="live-room-code mono">{liveRoom.code}</p>
+        </div>
+        <a class="btn btn-primary" href={liveRoom.join_url || `/j/${liveRoom.code}`}>
+          Rejoindre la partie
+        </a>
+      </div>
+    {/if}
 
     <div class="landing-grid">
       <form class="join-card stack" onsubmit={join}>

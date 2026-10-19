@@ -33,6 +33,16 @@ export async function fetchMeta(): Promise<Meta> {
   return json<Meta>(await fetch('/api/meta'));
 }
 
+export interface RoomStatus {
+  live: boolean;
+  code: string | null;
+  join_url: string | null;
+}
+
+export async function fetchRoom(): Promise<RoomStatus> {
+  return json<RoomStatus>(await fetch('/api/room'));
+}
+
 export interface Me {
   username: string;
   role: 'prof' | 'admin';

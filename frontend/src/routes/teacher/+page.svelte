@@ -170,7 +170,17 @@
   <header class="teacher-bar">
     <span class="brand"><span class="brand-mark">✈</span> Quiz BIA</span>
     <span class="spacer"></span>
-    {#if client.code}
+    {#if client.joinUrl}
+      <a
+        class="pill mono join-pill"
+        href={client.joinUrl}
+        target="_blank"
+        rel="noreferrer"
+        title="Ouvrir la page de connexion"
+      >
+        {client.joinUrl}
+      </a>
+    {:else if client.code}
       <span class="pill mono">Partie {client.code}</span>
     {/if}
     {#if client.question}

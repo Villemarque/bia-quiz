@@ -117,6 +117,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/chapters", get(api::chapters))
         .route("/api/auth/me", get(api::me))
         .route("/api/meta", get(api::meta))
+        .route("/api/room", get(api::room_status))
         .route("/api/prof/sessions", get(api::prof_sessions))
         .route("/api/prof/sessions/{id}", get(api::prof_session))
         .route(

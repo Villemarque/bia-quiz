@@ -47,6 +47,32 @@ pub async fn meta(State(state): State<AppState>) -> Response {
     .into_response()
 }
 
+#[derive(Serialize)]
+struct RoomStatus {
+    live: bool,
+    code: Option<String>,
+    join_url: Option<String>,
+}
+
+/// Public status of the single live room, used by the landing page.
+pub async fn room_status(State(state): State<AppState>) -> Response {
+    let guard = state.room.lock().await;
+    match guard.as_ref().filter(|room| room.is_alive()) {
+        Some(room) => Json(RoomStatus {
+            live: true,
+            code: Some(room.code.clone()),
+            join_url: Some(state.cfg.join_url(&room.code)),
+        })
+        .into_response(),
+        None => Json(RoomStatus {
+            live: false,
+            code: None,
+            join_url: None,
+        })
+        .into_response(),
+    }
+}
+
 pub async fn chapters(State(state): State<AppState>) -> Response {
     match db::chapters(&state.db).await {
         Ok(rows) => Json(rows).into_response(),
