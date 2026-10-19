@@ -20,10 +20,6 @@
 
     <div>
       <h1>Quiz BIA</h1>
-      <p class="lead">
-        Le professeur projette la question, vous répondez depuis votre téléphone.
-        Plus vite vous répondez, plus vous marquez de points.
-      </p>
     </div>
 
     <div class="landing-grid">
