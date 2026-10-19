@@ -93,6 +93,10 @@ export class QuizClient {
       case 'room.state':
         this.roomSeen = true;
         this.phase = message.phase;
+        if (message.phase !== 'question') {
+          this.stopTimer();
+          this.remaining = 0;
+        }
         if (message.code) this.code = message.code;
         this.playerCount = message.player_count ?? 0;
         if (Array.isArray(message.players) && message.players.length > 0) {
@@ -129,6 +133,9 @@ export class QuizClient {
         break;
       case 'question.result':
         this.result = Boolean(message.correct);
+        this.phase = 'reveal_answer';
+        this.stopTimer();
+        this.remaining = 0;
         break;
       case 'leaderboard':
         this.leaderboard = message.top;

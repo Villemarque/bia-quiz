@@ -313,6 +313,7 @@ impl Room {
         self.deadline = None;
         self.paused_remaining = None;
         self.generation += 1;
+        self.send_room_state_all();
 
         let question = self.questions[position].clone();
         let correct_index = self
