@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import SourceFooter from '$lib/components/SourceFooter.svelte';
   import {
     fetchMe,
     fetchSession,
@@ -205,5 +204,4 @@
       {/if}
     </section>
   {/if}
-  <SourceFooter />
 </main>

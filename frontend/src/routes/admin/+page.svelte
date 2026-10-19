@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import SourceFooter from '$lib/components/SourceFooter.svelte';
   import {
     fetchAdminStats,
     fetchJob,
@@ -185,5 +184,4 @@
   {:else}
     <p class="muted">Chargement…</p>
   {/if}
-  <SourceFooter />
 </main>

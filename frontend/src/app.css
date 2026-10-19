@@ -206,7 +206,8 @@ label {
 }
 
 .landing {
-  min-height: 100vh;
+  min-height: calc(100vh - 2.75rem);
+  min-height: calc(100dvh - 2.75rem);
   display: grid;
   place-items: center;
   padding: 2rem 1rem;
@@ -268,7 +269,8 @@ label {
 /* ---------------------------------------------------------------- teacher */
 
 .teacher {
-  min-height: 100vh;
+  min-height: calc(100vh - 2.75rem);
+  min-height: calc(100dvh - 2.75rem);
   display: flex;
   flex-direction: column;
   background:
@@ -586,7 +588,8 @@ label {
 /* ---------------------------------------------------------------- student */
 
 .student {
-  min-height: 100vh;
+  min-height: calc(100vh - 2.75rem);
+  min-height: calc(100dvh - 2.75rem);
   display: flex;
   flex-direction: column;
   padding: 1rem;
@@ -706,7 +709,8 @@ label {
 /* ---------------------------------------------------------------- prof */
 
 .prof {
-  min-height: 100vh;
+  min-height: calc(100vh - 2.75rem);
+  min-height: calc(100dvh - 2.75rem);
   background: var(--bg);
   color: var(--navy);
   padding: 2rem clamp(1rem, 4vw, 3rem);
@@ -884,4 +888,31 @@ label {
 
 .field input {
   width: 6rem;
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.site-footer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.65rem 1rem;
+  background: var(--navy-2);
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.site-footer a {
+  color: rgba(255, 255, 255, 0.82);
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  color: var(--coral);
+  text-decoration: underline;
 }

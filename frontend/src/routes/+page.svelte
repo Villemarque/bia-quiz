@@ -1,18 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$lib/shim/navigation';
-  import { fetchMeta, type Meta } from '$lib/api';
 
   let code = $state('');
-  let meta = $state<Meta | null>(null);
-
-  onMount(() => {
-    fetchMeta()
-      .then((value) => {
-        meta = value;
-      })
-      .catch(() => {});
-  });
 
   function join(event: SubmitEvent): void {
     event.preventDefault();
@@ -56,28 +45,12 @@
       </form>
 
       <div class="join-card stack">
-        <h2>Professeur</h2>
+        <h2>Créer une nouvelle partie</h2>
         <p class="small muted">
           Préparez une partie par chapitre, projetez les questions, lancez le chronomètre.
         </p>
-        <a class="btn btn-ghost" href="/teacher">Espace professeur</a>
-        <a class="btn btn-ghost" href="/prof">Résultats des parties</a>
+        <a class="btn btn-primary" href="/teacher">Créer une nouvelle partie</a>
       </div>
     </div>
-
-    <footer class="small muted">
-      BIA · Aérien Ambassadeurs Avenir — code sous AGPL-3.0 ·
-      <a href="https://github.com/Villemarque/bia-annales-database-csv">banque de questions</a>
-      {#if meta?.source_url}
-        · <a href={meta.source_url}>code source</a>
-      {/if}
-      {#if meta?.commit && meta.commit !== 'unknown'}
-        · {#if meta.commit_url}
-          <a href={meta.commit_url}>commit {meta.commit}</a>
-        {:else}
-          commit {meta.commit}
-        {/if}
-      {/if}
-    </footer>
   </div>
 </main>
