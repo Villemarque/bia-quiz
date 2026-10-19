@@ -24,11 +24,6 @@
 /frontend/static/fonts/
 /charte-graphique.html
 
-# Devenv / direnv
-/.devenv/
-/.direnv/
-/devenv.local.nix
-
 # Local Ansible copies; only *.example files are committed.
 /deploy/artefacts/
 /deploy/ansible/inventory*.yml

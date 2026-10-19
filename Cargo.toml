@@ -38,3 +38,8 @@ clap = { version = "4", features = ["derive"] }
 [profile.release]
 lto = "thin"
 strip = true
+
+# Dev builds do not need debug info. Skipping its generation speeds up
+# recompilation and shrinks target/debug; use `debug = 1` for line tables.
+[profile.dev]
+debug = 0

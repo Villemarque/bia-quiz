@@ -12,7 +12,7 @@ RELEASE_DIR := $(TARGET_DIR)$(if $(TARGET_TRIPLE),/$(TARGET_TRIPLE),)/release
 BIN         := $(RELEASE_DIR)/bia-quiz
 IMPORT_BIN  := $(RELEASE_DIR)/bia-import
 
-.PHONY: all build artefacts build-artefact cross frontend import run test check clean distclean doctor uname
+.PHONY: all build artefacts build-artefact cross frontend import run dev test check clean distclean doctor uname
 
 all: build
 
@@ -75,6 +75,20 @@ import: build
 run: build
 	BIA_QUIZ_PROF_PASSWORD=$${BIA_QUIZ_PROF_PASSWORD:-dev} \
 	BIA_QUIZ_ADMIN_PASSWORD=$${BIA_QUIZ_ADMIN_PASSWORD:-dev} "$(BIN)"
+
+# Fast development loop: debug backend on 8080 + Vite on 5173.
+# Open http://localhost:5173 so the Origin matches the public base URL.
+dev:
+	@test -d $(FRONTEND)/node_modules || pnpm --dir $(FRONTEND) install
+	@set -e; \
+	backend=; frontend=; \
+	trap 'kill $$backend $$frontend 2>/dev/null || true' INT TERM EXIT; \
+	BIA_QUIZ_PROF_PASSWORD=$${BIA_QUIZ_PROF_PASSWORD:-dev} \
+	BIA_QUIZ_ADMIN_PASSWORD=$${BIA_QUIZ_ADMIN_PASSWORD:-dev} \
+	BIA_QUIZ_PUBLIC_BASE_URL=$${BIA_QUIZ_PUBLIC_BASE_URL:-http://localhost:5173} \
+	cargo run -p bia-server --bin bia-quiz & backend=$$!; \
+	pnpm --dir $(FRONTEND) dev & frontend=$$!; \
+	wait
 
 test:
 	cargo test --workspace

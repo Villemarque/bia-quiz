@@ -50,20 +50,22 @@ Open <http://localhost:8080>: the landing page joins a game, `/teacher` starts o
 The release binary embeds `frontend/dist` at compile time. Figures are stored in SQLite
 by `bia-import` and served from the database at runtime.
 
-## Development environment (devenv)
+## Development
 
-[devenv](https://devenv.sh/) provides Rust, Node 22, pnpm, SQLite, Caddy, Ansible and
-the deploy linting tools. It is optional; the `Makefile` remains the source of truth.
+Requirements: Rust 1.86+, Node 20+, pnpm and a C compiler.
 
 ```sh
-direnv allow          # or: devenv shell
-setup                 # pnpm install + make build
-devenv up             # backend on :8080 + Vite on :5173
+pnpm --dir frontend install
+make dev
 ```
 
-With `devenv up`, open <http://localhost:5173>; Vite proxies `/api`, `/ws`, `/figures`
-and `/healthz` to the backend. The shell also exposes `test`, `check`, `fmt`, `lint`,
-`import`, `db`, `ansible-check` and `ansible-lint`.
+`make dev` starts the debug backend on `127.0.0.1:8080` and Vite on `:5173`.
+Open <http://localhost:5173>; Vite proxies `/api`, `/ws`, `/figures` and `/healthz`
+to the backend. The dev profile has `debug = 0`, so Rust rebuilds are faster and the
+debug binary is smaller; use `debug = 1` in `Cargo.toml` if you need line tables in
+backtraces.
+
+`make run` remains the release smoke test on <http://localhost:8080>.
 
 ## Make targets
 
@@ -72,7 +74,8 @@ and `/healthz` to the backend. The shell also exposes `test`, `check`, `fmt`, `l
 | `make build` | build the SPA, then the native release binary (embeds `frontend/dist`) |
 | `make artefacts` | cross-compile Linux **x86_64** and stage binaries/config in `deploy/artefacts/` |
 | `make cross` / `build-artefact` | aliases for `make artefacts` |
-| `make run` | build, then run on `127.0.0.1:8080` with `BIA_QUIZ_PROF_PASSWORD` and `BIA_QUIZ_ADMIN_PASSWORD` (both `dev` by default) |
+| `make dev` | debug backend on `127.0.0.1:8080` + Vite on `127.0.0.1:5173` (open `:5173`) |
+| `make run` | build the release binary, then run it on `127.0.0.1:8080` with `BIA_QUIZ_PROF_PASSWORD` and `BIA_QUIZ_ADMIN_PASSWORD` (both `dev` by default) |
 | `make import` | build, download the upstream TSV + figures, then (re)import into `bia.sqlite3` |
 | `make test` | `cargo test --workspace` + `svelte-check` |
 | `make check` | `cargo fmt --check`, `clippy -D warnings`, `svelte-check` |
