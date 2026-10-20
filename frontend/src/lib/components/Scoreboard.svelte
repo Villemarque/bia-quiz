@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type { Score } from '$lib/types';
 
+  const DELAY = 800;
   const DURATION = 1500;
 
   let {
@@ -48,10 +49,10 @@
       return;
     }
 
-    const begin = performance.now();
+    const begin = performance.now() + DELAY;
     let frame = 0;
     const tick = (now: number) => {
-      const t = Math.min(1, (now - begin) / DURATION);
+      const t = Math.min(1, Math.max(0, (now - begin) / DURATION));
       const eased = 1 - Math.pow(1 - t, 3);
       displayed = Object.fromEntries(
         target.map((score) => {
@@ -66,8 +67,8 @@
   });
 
   onMount(() => {
-    const frame = requestAnimationFrame(() => (mounted = true));
-    return () => cancelAnimationFrame(frame);
+    const timer = window.setTimeout(() => (mounted = true), DELAY);
+    return () => window.clearTimeout(timer);
   });
 </script>
 
