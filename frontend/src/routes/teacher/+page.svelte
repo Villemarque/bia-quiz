@@ -191,7 +191,9 @@
     {#if client.question}
       <span class="pill">{client.question.index + 1} / {client.question.total}</span>
     {/if}
-    <span class="pill">{client.connected ? 'En ligne' : 'Hors ligne'}</span>
+    {#if !client.connected}
+      <span class="pill">Hors ligne</span>
+    {/if}
   </header>
 
   <div class="teacher-main">
