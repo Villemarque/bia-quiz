@@ -11,6 +11,7 @@ pub mod ws;
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::time::Instant;
 
 use axum::extract::{DefaultBodyLimit, Request};
 use axum::http::{header, HeaderValue};
@@ -59,6 +60,29 @@ impl AppState {
 const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; base-uri 'none'; object-src 'none'; \
 frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self'; \
 style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:";
+
+/// Log HTML page hits at INFO. Assets, figures and API JSON stay quiet.
+async fn log_page_requests(request: Request, next: middleware::Next) -> Response {
+    let method = request.method().clone();
+    let path = request.uri().path().to_owned();
+    let started = Instant::now();
+    let response = next.run(request).await;
+    let is_html = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.starts_with("text/html"));
+    if is_html {
+        tracing::info!(
+            %method,
+            %path,
+            status = response.status().as_u16(),
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "page request"
+        );
+    }
+    response
+}
 
 async fn security_headers(
     axum::extract::State(state): axum::extract::State<AppState>,
@@ -145,5 +169,6 @@ pub fn router(state: AppState) -> Router {
             security_headers,
         ))
         .layer(auth_layer)
+        .layer(middleware::from_fn(log_page_requests))
         .with_state(state)
 }
