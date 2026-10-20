@@ -684,6 +684,8 @@ label {
 }
 
 .leaderboard li {
+  position: relative;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 2.4rem 1fr auto;
   gap: 0.8rem;
@@ -692,6 +694,24 @@ label {
   border-radius: 12px;
   padding: 0.6rem 0.9rem;
   font-size: 1.05rem;
+  transform: translateY(calc(var(--shift, 0) * (100% + 0.5rem)));
+  transition: transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.leaderboard .bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(255, 228, 132, 0.26), rgba(233, 119, 112, 0.14));
+  pointer-events: none;
+}
+
+.leaderboard .rank,
+.leaderboard .nickname,
+.leaderboard .points {
+  position: relative;
+  z-index: 1;
 }
 
 .leaderboard .rank {
@@ -699,9 +719,45 @@ label {
   color: var(--gold);
 }
 
+.leaderboard .nickname {
+  font-weight: 600;
+}
+
 .leaderboard .points {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.leaderboard-screen {
+  align-items: center;
+  text-align: center;
+  padding-top: 0.5rem;
+}
+
+.leaderboard-screen h1 {
+  font-size: clamp(2rem, 5vw, 3.4rem);
+}
+
+.leaderboard-screen .leaderboard-panel {
+  width: min(920px, 100%);
+}
+
+.leaderboard-screen .leaderboard {
+  gap: 0.65rem;
+}
+
+.leaderboard-screen .leaderboard li {
+  grid-template-columns: 3.2rem 1fr auto;
+  padding: clamp(0.65rem, 1.3vw, 1.05rem) 1.3rem;
+  font-size: clamp(1.2rem, 2.2vw, 1.9rem);
+}
+
+.leaderboard-screen .leaderboard .rank {
+  font-size: 1.1em;
+}
+
+.leaderboard-actions {
+  width: min(920px, 100%);
 }
 
 .podium {

@@ -32,6 +32,8 @@ pub enum ClientMsg {
     TeacherStartQuestion,
     #[serde(rename = "teacher.force_reveal")]
     TeacherForceReveal,
+    #[serde(rename = "teacher.show_leaderboard")]
+    TeacherShowLeaderboard,
     #[serde(rename = "teacher.next")]
     TeacherNext,
     #[serde(rename = "teacher.pause")]

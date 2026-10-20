@@ -215,21 +215,45 @@
           <button class="btn btn-primary" onclick={restarted}>Nouvelle partie</button>
         </div>
       </div>
+    {:else if client.phase === 'reveal_leaderboard'}
+      <div class="stack leaderboard-screen">
+        <h1>Classement</h1>
+        <Scoreboard
+          scores={client.leaderboard}
+          previous={client.previousLeaderboard}
+          from={client.previousPoints}
+          animate
+          title="Top 7"
+        />
+        <div class="teacher-controls leaderboard-actions">
+          <button class="btn btn-primary" onclick={() => client.next()}>
+            Question suivante
+          </button>
+          <span class="spacer"></span>
+          <button class="btn btn-ghost" onclick={() => client.end()}>Terminer</button>
+        </div>
+      </div>
     {:else if client.question}
       <div class="stack">
         <div class="row">
           <span class="pill">{client.question.index + 1} / {client.question.total}</span>
-          <span class="pill mono">{Math.ceil(client.remaining / 1000)} s</span>
-          {#if client.paused}
-            <span class="pill">En pause</span>
+          {#if client.phase === 'question'}
+            <span class="pill mono">{Math.ceil(client.remaining / 1000)} s</span>
+            {#if client.paused}
+              <span class="pill">En pause</span>
+            {/if}
+          {:else}
+            <span class="pill">Réponse</span>
           {/if}
           <span class="spacer"></span>
           <span class="pill">{client.answeredCount} / {client.playerCount} réponses</span>
         </div>
 
-        <div class="timer">
-          <div class="timer-fill" style={`width:${timerWidth}%`}></div>
-        </div>
+        {#if client.phase === 'question'}
+          <div class="timer">
+            <div class="timer-fill" style={`width:${timerWidth}%`}></div>
+          </div>
+        {/if}
 
         <p class="question-text">{client.question.text}</p>
 
@@ -285,15 +309,13 @@
             {/if}
             <button class="btn btn-ghost" onclick={() => client.skip()}>Passer</button>
           {:else}
-            <button class="btn btn-primary" onclick={() => client.next()}>
-              Question suivante
+            <button class="btn btn-primary" onclick={() => client.showLeaderboard()}>
+              Afficher le classement
             </button>
           {/if}
           <span class="spacer"></span>
           <button class="btn btn-ghost" onclick={() => client.end()}>Terminer</button>
         </div>
-
-        <Scoreboard scores={client.leaderboard} title="Top 7" />
       </div>
     {:else if showSetup}
       <div class="stack" style="max-width: 900px">

@@ -163,6 +163,7 @@ fn teacher_command(message: ClientMsg) -> Option<TeacherCmd> {
     match message {
         ClientMsg::TeacherStartQuestion => Some(TeacherCmd::StartQuestion),
         ClientMsg::TeacherForceReveal => Some(TeacherCmd::ForceReveal),
+        ClientMsg::TeacherShowLeaderboard => Some(TeacherCmd::ShowLeaderboard),
         ClientMsg::TeacherNext => Some(TeacherCmd::Next),
         ClientMsg::TeacherPause => Some(TeacherCmd::Pause),
         ClientMsg::TeacherResume => Some(TeacherCmd::Resume),

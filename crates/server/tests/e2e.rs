@@ -187,6 +187,14 @@ async fn full_question_flow() {
     let result = wait_for(&mut student, "question.result").await;
     assert_eq!(result["correct"], true);
 
+    send(
+        &mut teacher,
+        serde_json::json!({ "type": "teacher.show_leaderboard" }),
+    )
+    .await;
+    let board = wait_for(&mut teacher, "leaderboard").await;
+    assert_eq!(board["top"][0]["nickname"], "Max");
+
     // The points were written to SQLite.
     let points: i32 = db
         .call(|conn| {

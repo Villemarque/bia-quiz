@@ -24,6 +24,8 @@ export class QuizClient {
   question = $state<QuestionStart | null>(null);
   reveal = $state<Reveal | null>(null);
   leaderboard = $state<Score[]>([]);
+  previousLeaderboard = $state<Score[]>([]);
+  previousPoints = $state<Record<string, number>>({});
   paused = $state(false);
   final = $state<SessionEnd | null>(null);
   answer = $state<number | null>(null);
@@ -115,6 +117,10 @@ export class QuizClient {
         this.result = null;
         this.answer = null;
         this.answeredCount = 0;
+        this.previousLeaderboard = [...this.leaderboard];
+        this.previousPoints = Object.fromEntries(
+          this.players.map((player) => [player.nickname, player.points]),
+        );
         this.leaderboard = [];
         this.paused = false;
         this.startTimer(message.ends_at - message.server_now);
@@ -190,6 +196,11 @@ export class QuizClient {
 
   forceReveal(): void {
     this.socket?.send({ type: 'teacher.force_reveal' });
+  }
+
+  showLeaderboard(): void {
+    this.error = '';
+    this.socket?.send({ type: 'teacher.show_leaderboard' });
   }
 
   next(): void {

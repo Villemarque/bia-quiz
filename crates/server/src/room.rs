@@ -30,6 +30,7 @@ pub fn now_ms() -> i64 {
 pub enum TeacherCmd {
     StartQuestion,
     ForceReveal,
+    ShowLeaderboard,
     Next,
     Pause,
     Resume,
@@ -244,6 +245,7 @@ impl Room {
                     self.reveal();
                 }
             }
+            TeacherCmd::ShowLeaderboard => self.show_leaderboard(),
             TeacherCmd::Pause => self.pause(),
             TeacherCmd::Resume => self.resume(),
             TeacherCmd::Skip => self.skip().await,
@@ -342,7 +344,6 @@ impl Room {
                 .unwrap_or(false);
             let _ = tx.try_send(ServerMsg::QuestionResult { correct });
         }
-        self.schedule(2_500);
     }
 
     fn show_leaderboard(&mut self) {
@@ -351,6 +352,7 @@ impl Room {
         }
         self.phase = Phase::RevealLeaderboard;
         self.generation += 1;
+        self.send_room_state_all();
         self.send_teacher(ServerMsg::Leaderboard { top: self.top(7) });
     }
 

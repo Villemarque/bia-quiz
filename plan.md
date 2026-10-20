@@ -202,14 +202,16 @@ highlighted, the others dimmed; the figure stays visible so the class can see wh
 question was about. ⚠ proposed — confirm: also show per-choice counts
 (a small bar under each choice).
 
-**Reveal #2 — leaderboard** (⚠ proposed: appears 2–3 s after reveal #1, or on a teacher
-click): **top 7** with nickname + points, animated in. The teacher then clicks
+**Reveal #2 — leaderboard** (teacher clicks `Afficher le classement` after reveal #1):
+**top 7** with nickname + points. Points, bars and row order animate over 1.5 s from
+the previous question's values to the current ones. The teacher then clicks
 `Question suivante`.
 
 **Podium** — top 3 animated, then the top-7 list; each student sees their final rank
 and points on their phone.
 
-Buttons: `Révéler maintenant`, `Pause`, `Passer`, `Question suivante`, `Terminer`.
+Buttons: `Révéler maintenant`, `Pause`, `Passer`, `Afficher le classement`,
+`Question suivante`, `Terminer`.
 
 ### 5.2 Student phone
 
@@ -380,7 +382,7 @@ Client → server:
 | Message | From |
 |---------|------|
 | `teacher.configure` / `teacher.start` | teacher |
-| `teacher.start_question`, `teacher.force_reveal`, `teacher.next`, `teacher.pause`, `teacher.resume`, `teacher.skip`, `teacher.end` | teacher |
+| `teacher.start_question`, `teacher.force_reveal`, `teacher.show_leaderboard`, `teacher.next`, `teacher.pause`, `teacher.resume`, `teacher.skip`, `teacher.end` | teacher |
 | `student.join` `{nickname}` | student |
 | `student.answer` `{choice: 0..3}` | student — `choice` is the **displayed** position; the server maps it back to the original index. Idempotent: replaces the previous answer |
 | `ping` / `pong` | both (clock offset + liveness) |
