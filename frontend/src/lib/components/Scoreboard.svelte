@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import type { Score } from '$lib/types';
 
-  const DELAY = 800;
+  const DELAY = 1000;
   const DURATION = 1500;
 
   let {
