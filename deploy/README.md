@@ -419,9 +419,19 @@ Caddy was installed and configured by the Ansible `caddy` role in §2.5. It serv
 
 ```
 <bia_domain> {
+    log {
+        output stdout
+        format console
+    }
     encode gzip
     reverse_proxy 127.0.0.1:<bia_app_port>
 }
+```
+
+Access logs go to stdout, so they are captured by journald:
+
+```sh
+journalctl -u caddy -f
 ```
 
 Caddy obtains the certificate automatically (ports 80/443 open, DNS correct) and proxies

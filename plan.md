@@ -948,6 +948,10 @@ Sample `deploy/Caddyfile`:
 
 ```caddy
 quiz.asso-triple-a.org {
+    log {
+        output stdout
+        format console
+    }
     encode gzip
     reverse_proxy 127.0.0.1:8080
 }

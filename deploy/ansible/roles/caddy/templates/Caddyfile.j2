@@ -1,4 +1,8 @@
 {{ bia_domain }} {
+    log {
+        output stdout
+        format console
+    }
     encode gzip
     reverse_proxy 127.0.0.1:{{ bia_app_port }}
 }

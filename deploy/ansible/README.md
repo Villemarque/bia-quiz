@@ -223,11 +223,16 @@ bia_app_port: 8080             # must match [server].bind in bia.toml
 - The generated `/etc/caddy/Caddyfile` is:
   ```
   <bia_domain> {
+      log {
+          output stdout
+          format console
+      }
       encode gzip
       reverse_proxy 127.0.0.1:<bia_app_port>
   }
   ```
 - Caddy handles the WebSocket upgrade, HTTP→HTTPS redirect and certificate renewal.
+- Access logs go to stdout, i.e. `journalctl -u caddy -f`.
 - Set `bia_enable_caddy: false` if Caddy is managed elsewhere.
 - The role fails fast if `bia_domain` is empty or `bia_app_port` is invalid.
 - Rate limiting stays in the application, not in Caddy.
