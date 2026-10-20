@@ -916,6 +916,45 @@ label {
   color: var(--navy);
 }
 
+.reveal-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.reveal-panel.good {
+  background: var(--teal);
+  color: var(--navy);
+  border-color: transparent;
+}
+
+.reveal-panel.bad {
+  background: var(--coral);
+  color: var(--navy);
+  border-color: transparent;
+}
+
+.reveal-headline {
+  font-size: clamp(1.8rem, 7vw, 3rem);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.reveal-choice {
+  margin: 0;
+  font-size: clamp(0.95rem, 3vw, 1.2rem);
+  font-weight: 600;
+  opacity: 0.86;
+}
+
 .big-rank {
   font-size: clamp(3rem, 14vw, 6rem);
   font-weight: 700;

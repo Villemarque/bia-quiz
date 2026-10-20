@@ -42,6 +42,16 @@
   const canAnswer = $derived(
     client.phase === 'question' && client.remaining > 0,
   );
+
+  const revealed = $derived(
+    client.result !== null ||
+      client.phase === 'reveal_answer' ||
+      client.phase === 'reveal_leaderboard',
+  );
+
+  const selectedChoice = $derived(
+    client.answer !== null ? (client.question?.choices[client.answer] ?? null) : null,
+  );
 </script>
 
 <main class="student joy-bg">
@@ -102,29 +112,48 @@
         <div class="timer-fill" style={`width:${timerWidth}%`}></div>
       </div>
 
-      <div class="answer-grid">
-        {#each client.question.choices as choice, index}
-          <AnswerTile
-            variant="student"
-            {choice}
-            index={index}
-            selected={client.answer === index}
-            disabled={!canAnswer}
-            onclick={() => client.choose(index)}
-          />
-        {/each}
-      </div>
-
-      {#if client.answer !== null && client.result === null}
-        <p class="small muted" style="text-align:center">
-          Réponse envoyée — vous pouvez encore changer jusqu'à la fin du chrono.
-        </p>
-      {/if}
-
-      {#if client.result !== null}
-        <div class="result" class:good={client.result} class:bad={!client.result}>
-          {client.result ? 'Bonne réponse' : 'Mauvaise réponse'}
+      {#if revealed}
+        <div
+          class="reveal-panel"
+          class:good={client.result === true}
+          class:bad={client.result === false && client.answer !== null}
+        >
+          <div class="reveal-headline">
+            {#if client.result === true}
+              Bonne réponse
+            {:else if client.answer !== null}
+              Mauvaise réponse
+            {:else}
+              Pas de réponse
+            {/if}
+          </div>
+          <p class="reveal-choice">
+            {#if selectedChoice}
+              Votre réponse : <strong>{selectedChoice.letter}</strong> · {selectedChoice.text}
+            {:else}
+              Vous n'avez pas répondu.
+            {/if}
+          </p>
         </div>
+      {:else}
+        <div class="answer-grid">
+          {#each client.question.choices as choice, index}
+            <AnswerTile
+              variant="student"
+              {choice}
+              index={index}
+              selected={client.answer === index}
+              disabled={!canAnswer}
+              onclick={() => client.choose(index)}
+            />
+          {/each}
+        </div>
+
+        {#if client.answer !== null}
+          <p class="small muted" style="text-align:center">
+            Réponse envoyée — vous pouvez encore changer jusqu'à la fin du chrono.
+          </p>
+        {/if}
       {/if}
     </div>
   {:else}
