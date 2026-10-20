@@ -404,6 +404,20 @@ label {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.join-bar {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.join-label {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .join-pill {
   max-width: min(760px, 70vw);
   white-space: normal;

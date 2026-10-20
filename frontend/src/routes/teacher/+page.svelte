@@ -99,6 +99,8 @@
 
   const showSetup = $derived(settled && !client.roomSeen && client.phase !== 'podium');
 
+  const shortJoinUrl = $derived(client.joinUrl.replace(/^https?:\/\//, ''));
+
   const totalPicked = $derived(
     selected.reduce((sum, key) => sum + (Number(picks[key]) || 0), 0),
   );
@@ -171,15 +173,18 @@
     <span class="brand"><span class="brand-mark">✈</span> Quiz BIA</span>
     <span class="spacer"></span>
     {#if client.joinUrl}
-      <a
-        class="pill mono join-pill"
-        href={client.joinUrl}
-        target="_blank"
-        rel="noreferrer"
-        title="Ouvrir la page de connexion"
-      >
-        {client.joinUrl}
-      </a>
+      <span class="join-bar">
+        <span class="join-label">Rejoins à l'adresse</span>
+        <a
+          class="pill mono join-pill"
+          href={client.joinUrl}
+          target="_blank"
+          rel="noreferrer"
+          title="Ouvrir la page de connexion"
+        >
+          {shortJoinUrl}
+        </a>
+      </span>
     {:else if client.code}
       <span class="pill mono">Partie {client.code}</span>
     {/if}
