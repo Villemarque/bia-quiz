@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { QuizClient } from '$lib/stores/quiz.svelte';
   import { readLocal, writeLocal } from '$lib/env';
+  import { fetchRoom } from '$lib/api';
   import AnswerTile from '$lib/components/AnswerTile.svelte';
 
   let { data } = $props();
@@ -10,10 +11,30 @@
 
   let nickname = $state(readLocal('bia-nickname'));
   let started = $state(false);
+  let checking = $state(true);
+  let roomMissing = $state(false);
 
   onMount(() => {
-    if (code && nickname.trim()) start(nickname);
-    return () => client.destroy();
+    let stopped = false;
+    fetchRoom()
+      .then((status) => {
+        if (stopped) return;
+        if (!status.live || status.code !== code) {
+          roomMissing = true;
+          return;
+        }
+        checking = false;
+        if (code && nickname.trim()) start(nickname);
+      })
+      .catch(() => {
+        if (stopped) return;
+        checking = false;
+        if (code && nickname.trim()) start(nickname);
+      });
+    return () => {
+      stopped = true;
+      client.destroy();
+    };
   });
 
   function start(name: string): void {
@@ -57,12 +78,6 @@
 <main class="student joy-bg">
   <header class="student-top">
     <span class="brand"><span class="brand-mark">✈</span> Quiz BIA</span>
-    <span class="spacer"></span>
-    {#if client.connected}
-      <span class="pill pill-live">En ligne</span>
-    {:else}
-      <span class="pill">Connexion…</span>
-    {/if}
   </header>
 
   {#if !code}
@@ -70,6 +85,18 @@
       <h1>Code manquant</h1>
       <p class="muted">Scannez le QR code affiché par le professeur.</p>
       <a class="btn btn-primary" href="/">Retour</a>
+    </div>
+  {:else if roomMissing}
+    <div class="card stack" style="margin:auto; text-align:center; max-width:420px; width:100%">
+      <h1>Partie introuvable</h1>
+      <p class="muted">
+        Aucune partie en cours avec le code <strong class="mono">{code}</strong>.
+      </p>
+      <a class="btn btn-primary" href="/">Retour à l'accueil</a>
+    </div>
+  {:else if checking}
+    <div class="card stack" style="margin:auto; text-align:center; max-width:420px; width:100%">
+      <p class="muted">Vérification de la partie…</p>
     </div>
   {:else if !started}
     <div class="card stack" style="margin:auto; max-width:420px; width:100%">
@@ -148,12 +175,6 @@
             />
           {/each}
         </div>
-
-        {#if client.answer !== null}
-          <p class="small muted" style="text-align:center">
-            Réponse envoyée — vous pouvez encore changer jusqu'à la fin du chrono.
-          </p>
-        {/if}
       {/if}
     </div>
   {:else}

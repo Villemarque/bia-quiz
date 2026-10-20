@@ -439,11 +439,73 @@ label {
   padding: 1.4rem clamp(1rem, 3vw, 2.5rem) 2rem;
 }
 
-.teacher-controls {
+.teacher-bar-actions {
   display: flex;
-  gap: 0.6rem;
   flex-wrap: wrap;
   align-items: center;
+  gap: 0.5rem;
+}
+
+.teacher-bar-actions .btn:not(.btn-icon) {
+  padding: 0.35rem 0.9rem;
+  font-size: 0.9rem;
+}
+
+.teacher-bar-actions .btn-icon {
+  width: 1.8rem;
+  height: 1.8rem;
+  padding: 0;
+}
+
+.teacher-bar-actions .btn-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+}
+
+.btn-icon svg {
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: currentColor;
+}
+
+.btn-icon.is-blinking {
+  animation: pause-blink 1.1s ease-in-out infinite;
+}
+
+@keyframes pause-blink {
+  0%,
+  100% {
+    background: var(--coral);
+    border-color: var(--coral);
+    color: var(--navy);
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    background: var(--coral);
+    border-color: var(--coral);
+    color: var(--navy);
+    opacity: 0.55;
+    transform: scale(1.03);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-icon.is-blinking {
+    background: var(--coral);
+    border-color: var(--coral);
+    color: var(--navy);
+  }
 }
 
 .pill {
@@ -453,11 +515,6 @@ label {
   font-weight: 600;
   font-size: 0.9rem;
   white-space: nowrap;
-}
-
-.pill-live {
-  background: var(--coral);
-  color: var(--navy);
 }
 
 .question-text {
@@ -574,6 +631,11 @@ label {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
   overflow: hidden;
+}
+
+.timer-inline {
+  flex: 1 1 12rem;
+  min-width: 6rem;
 }
 
 .timer-fill {
@@ -768,10 +830,6 @@ label {
 
 .leaderboard-screen .leaderboard .rank {
   font-size: 1.1em;
-}
-
-.leaderboard-actions {
-  width: min(920px, 100%);
 }
 
 .podium {

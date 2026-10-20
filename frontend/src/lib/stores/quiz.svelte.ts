@@ -1,8 +1,12 @@
 import { JsonSocket } from '$lib/ws';
-import { writeLocal } from '$lib/env';
+import { readSession, writeLocal, writeSession } from '$lib/env';
 import type { ChapterPick, Phase, QuestionStart, Reveal, Score, SessionEnd } from '$lib/types';
 
 type Role = 'teacher' | 'student';
+
+function cachedJoinUrlKey(code: string): string {
+  return `bia-join-url:${code}`;
+}
 
 /**
  * One client for both roles. The room is the source of truth: this object only
@@ -47,6 +51,7 @@ export class QuizClient {
 
   connectTeacher(room?: string): void {
     this.code = room ?? '';
+    if (room) this.joinUrl = readSession(cachedJoinUrlKey(room));
     const params = new URLSearchParams({ role: 'teacher' });
     if (room) params.set('room', room);
     this.open(`/ws?${params.toString()}`);
@@ -88,6 +93,7 @@ export class QuizClient {
         this.roomSeen = true;
         this.code = message.code;
         this.joinUrl = message.join_url;
+        writeSession(cachedJoinUrlKey(message.code), message.join_url);
         this.available = message.available;
         this.requested = message.requested;
         this.warning = message.warning ?? '';

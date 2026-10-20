@@ -142,6 +142,13 @@
     client.create(choices, Number(seconds));
   }
 
+  function endSession(): void {
+    if (!window.confirm('Terminer la partie maintenant ? Le classement final sera affiché.')) {
+      return;
+    }
+    client.end();
+  }
+
   function restarted(): void {
     writeSession('bia-room', '');
     location.assign('/teacher');
@@ -171,7 +178,6 @@
 <main class="teacher joy-bg">
   <header class="teacher-bar">
     <span class="brand"><span class="brand-mark">✈</span> Quiz BIA</span>
-    <span class="spacer"></span>
     {#if client.joinUrl}
       <span class="join-bar">
         <span class="join-label">Rejoins à l'adresse</span>
@@ -188,12 +194,83 @@
     {:else if client.code}
       <span class="pill mono">Partie {client.code}</span>
     {/if}
+    <span class="spacer"></span>
     {#if client.question}
       <span class="pill">{client.question.index + 1} / {client.question.total}</span>
     {/if}
     {#if !client.connected}
       <span class="pill">Hors ligne</span>
     {/if}
+
+    <div class="teacher-bar-actions">
+      {#if client.final}
+        <button class="btn btn-primary" onclick={restarted}>Nouvelle partie</button>
+      {:else if client.phase === 'reveal_leaderboard'}
+        <button class="btn btn-primary" onclick={() => client.next()}>
+          Question suivante
+        </button>
+        <button class="btn btn-ghost" onclick={endSession}>Terminer</button>
+      {:else if client.question}
+        {#if client.phase === 'question'}
+          <button class="btn btn-primary" onclick={() => client.forceReveal()}>
+            Révéler maintenant
+          </button>
+          {#if client.paused}
+            <button
+              class="btn btn-ghost btn-icon is-blinking"
+              onclick={() => client.resume()}
+              aria-label="Reprendre"
+              title="Reprendre"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 5l12 7-12 7z" />
+              </svg>
+            </button>
+          {:else}
+            <button
+              class="btn btn-ghost btn-icon"
+              onclick={() => client.pause()}
+              aria-label="Mettre en pause"
+              title="Mettre en pause"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="6" y="5" width="4" height="14" rx="1" />
+                <rect x="14" y="5" width="4" height="14" rx="1" />
+              </svg>
+            </button>
+          {/if}
+          <button
+            class="btn btn-ghost btn-icon"
+            onclick={() => client.skip()}
+            aria-label="Passer"
+            title="Passer"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 5l9 7-9 7z" />
+              <rect x="16" y="5" width="3" height="14" rx="1" />
+            </svg>
+          </button>
+        {:else}
+          <button class="btn btn-primary" onclick={() => client.showLeaderboard()}>
+            Afficher le classement
+          </button>
+        {/if}
+        <button class="btn btn-ghost" onclick={endSession}>Terminer</button>
+      {:else if client.roomSeen}
+        <button class="btn btn-primary" onclick={() => client.startQuestion()}>
+          Démarrer la question
+        </button>
+        <button class="btn btn-ghost" onclick={endSession}>Terminer</button>
+      {:else if showSetup}
+        <button
+          class="btn btn-primary"
+          disabled={selected.length === 0 || totalPicked < 1}
+          onclick={create}
+        >
+          Créer la partie
+        </button>
+      {/if}
+    </div>
   </header>
 
   <div class="teacher-main">
@@ -218,9 +295,6 @@
           {/each}
         </div>
         <Scoreboard scores={client.final.top} title="Classement final (top 7)" />
-        <div>
-          <button class="btn btn-primary" onclick={restarted}>Nouvelle partie</button>
-        </div>
       </div>
     {:else if client.phase === 'reveal_leaderboard'}
       <div class="stack leaderboard-screen">
@@ -232,33 +306,20 @@
           animate
           title="Top 7"
         />
-        <div class="teacher-controls leaderboard-actions">
-          <button class="btn btn-primary" onclick={() => client.next()}>
-            Question suivante
-          </button>
-          <span class="spacer"></span>
-          <button class="btn btn-ghost" onclick={() => client.end()}>Terminer</button>
-        </div>
       </div>
     {:else if client.question}
       <div class="stack">
         <div class="row">
-          <span class="pill">{client.question.index + 1} / {client.question.total}</span>
           {#if client.phase === 'question'}
             <span class="pill mono">{Math.ceil(client.remaining / 1000)} s</span>
-            {#if client.paused}
-              <span class="pill">En pause</span>
-            {/if}
+            <div class="timer timer-inline">
+              <div class="timer-fill" style={`width:${timerWidth}%`}></div>
+            </div>
+          {:else}
+            <span class="spacer"></span>
           {/if}
-          <span class="spacer"></span>
           <span class="pill">{client.answeredCount} / {client.playerCount} réponses</span>
         </div>
-
-        {#if client.phase === 'question'}
-          <div class="timer">
-            <div class="timer-fill" style={`width:${timerWidth}%`}></div>
-          </div>
-        {/if}
 
         <p class="question-text">{client.question.text}</p>
 
@@ -301,26 +362,6 @@
           </div>
           <p class="correct-note">Bonne réponse : {client.reveal.correct_text}</p>
         {/if}
-
-        <div class="teacher-controls">
-          {#if client.phase === 'question'}
-            <button class="btn btn-primary" onclick={() => client.forceReveal()}>
-              Révéler maintenant
-            </button>
-            {#if client.paused}
-              <button class="btn btn-ghost" onclick={() => client.resume()}>Reprendre</button>
-            {:else}
-              <button class="btn btn-ghost" onclick={() => client.pause()}>Pause</button>
-            {/if}
-            <button class="btn btn-ghost" onclick={() => client.skip()}>Passer</button>
-          {:else}
-            <button class="btn btn-primary" onclick={() => client.showLeaderboard()}>
-              Afficher le classement
-            </button>
-          {/if}
-          <span class="spacer"></span>
-          <button class="btn btn-ghost" onclick={() => client.end()}>Terminer</button>
-        </div>
       </div>
     {:else if showSetup}
       <div class="stack" style="max-width: 900px">
@@ -385,16 +426,6 @@
         {#if selected.length > 0 && totalPicked === 0}
           <p class="muted small">Indiquez au moins une question.</p>
         {/if}
-
-        <div>
-          <button
-            class="btn btn-primary"
-            disabled={selected.length === 0 || totalPicked < 1}
-            onclick={create}
-          >
-            Créer la partie
-          </button>
-        </div>
       </div>
     {:else if client.roomSeen}
       <div class="lobby-grid">
@@ -423,13 +454,6 @@
           {#if client.warning}
             <div class="notice">{client.warning}</div>
           {/if}
-
-          <div class="teacher-controls">
-            <button class="btn btn-primary" onclick={() => client.startQuestion()}>
-              Démarrer la question
-            </button>
-            <button class="btn btn-ghost" onclick={() => client.end()}>Terminer</button>
-          </div>
         </div>
       </div>
     {:else}
