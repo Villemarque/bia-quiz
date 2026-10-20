@@ -249,8 +249,6 @@
             {#if client.paused}
               <span class="pill">En pause</span>
             {/if}
-          {:else}
-            <span class="pill">Réponse</span>
           {/if}
           <span class="spacer"></span>
           <span class="pill">{client.answeredCount} / {client.playerCount} réponses</span>
