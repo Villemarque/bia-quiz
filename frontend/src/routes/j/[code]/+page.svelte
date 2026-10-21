@@ -24,12 +24,10 @@
           return;
         }
         checking = false;
-        if (code && nickname.trim()) start(nickname);
       })
       .catch(() => {
         if (stopped) return;
         checking = false;
-        if (code && nickname.trim()) start(nickname);
       });
     return () => {
       stopped = true;
@@ -179,8 +177,17 @@
     </div>
   {:else}
     <div class="card stack" style="margin:auto; text-align:center; max-width:420px">
-      <h1>En attente</h1>
-      <p class="muted">{client.playerCount} joueur(s) connecté(s)</p>
+      <h1>Vous êtes en attente</h1>
+      <p class="muted">
+        Bonjour <strong>{nickname}</strong> — {client.playerCount} joueur(s) connecté(s)
+      </p>
+      {#if client.players.length > 0}
+        <div class="player-chips" style="justify-content:center">
+          {#each client.players as player}
+            <span class="chip">{player.nickname}</span>
+          {/each}
+        </div>
+      {/if}
       <p class="small">Le professeur va lancer la première question.</p>
       {#if client.error}
         <p class="error">{client.error}</p>

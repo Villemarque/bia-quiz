@@ -18,6 +18,8 @@
   let loadError = $state('');
   let settled = $state(false);
   let copied = $state(false);
+  let pickerOpen = $state(false);
+  let pickerDialog = $state<HTMLDialogElement>();
 
   type PickItem = {
     key: string;
@@ -54,6 +56,21 @@
   );
 
   const allItems = $derived(subjectGroups.flatMap((subject) => subject.items));
+
+  const selectedItems = $derived(
+    selected
+      .map((key) => allItems.find((item) => item.key === key))
+      .filter((item): item is PickItem => item !== undefined),
+  );
+
+  const pickerGroups = $derived(
+    subjectGroups
+      .map((subject) => ({
+        ...subject,
+        items: subject.items.filter((item) => item.available > 0),
+      }))
+      .filter((subject) => subject.items.length > 0),
+  );
 
   onMount(() => {
     fetchCatalog()
@@ -118,14 +135,26 @@
     client.reveal ? Math.max(1, ...client.reveal.counts) : 1,
   );
 
-  function toggleItem(item: PickItem): void {
-    if (selected.includes(item.key)) {
-      selected = selected.filter((key) => key !== item.key);
-      delete picks[item.key];
-      return;
-    }
+  $effect(() => {
+    if (!pickerDialog) return;
+    if (pickerOpen && !pickerDialog.open) pickerDialog.showModal();
+    else if (!pickerOpen && pickerDialog.open) pickerDialog.close();
+  });
+
+  function openPicker(): void {
+    pickerOpen = true;
+  }
+
+  function addItem(item: PickItem): void {
+    if (selected.includes(item.key)) return;
     selected = [...selected, item.key];
     picks[item.key] = Math.max(1, Math.min(DEFAULT_PER_PICK, item.available));
+    pickerOpen = false;
+  }
+
+  function removeItem(key: string): void {
+    selected = selected.filter((itemKey) => itemKey !== key);
+    delete picks[key];
   }
 
   function create(): void {
@@ -261,14 +290,6 @@
           Démarrer la question
         </button>
         <button class="btn btn-ghost" onclick={endSession}>Terminer</button>
-      {:else if showSetup}
-        <button
-          class="btn btn-primary"
-          disabled={selected.length === 0 || totalPicked < 1}
-          onclick={create}
-        >
-          Créer la partie
-        </button>
       {/if}
     </div>
   </header>
@@ -364,59 +385,69 @@
         {/if}
       </div>
     {:else if showSetup}
-      <div class="stack" style="max-width: 900px">
+      <div class="stack setup-page">
         <h1>Nouvelle partie</h1>
         <p class="muted">
-          Choisissez des chapitres, ou « Sans chapitre », le nombre de questions pour
-          chaque sélection, puis la durée.
+          Ajoutez des chapitres, réglez le nombre de questions pour chacun, puis la durée.
         </p>
 
-        <div class="chapter-groups">
-          {#each subjectGroups as subject}
-            <section class="chapter-group">
-              <h3>
-                {subject.title}
-                <span class="muted small">{subject.question_count} questions</span>
-              </h3>
-              <div class="chapter-list">
-                {#each subject.items as item}
-                  <div class="chapter-item" class:is-selected={selected.includes(item.key)}>
-                    <label class="chapter-pick">
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(item.key)}
-                        onchange={() => toggleItem(item)}
-                      />
-                      <span>{item.label}</span>
-                    </label>
-                    <span class="muted small" title="Questions disponibles">
-                      {item.available}
-                    </span>
-                    {#if selected.includes(item.key)}
-                      <label class="chapter-count" title="Questions à tirer">
-                        <input
-                          type="number"
-                          min="1"
-                          max={item.available}
-                          step="1"
-                          aria-label={`Nombre de questions pour ${item.label}`}
-                          bind:value={picks[item.key]}
-                        />
-                        <span class="muted small">q.</span>
-                      </label>
-                    {/if}
-                  </div>
-                {/each}
+        {#if selectedItems.length > 0}
+          <div class="setup-chapters">
+            {#each selectedItems as item (item.key)}
+              <div class="setup-chapter">
+                <div class="setup-chapter-head">
+                  <span class="setup-chapter-label">{item.label}</span>
+                  <span class="muted small">{item.available} questions disponibles</span>
+                  <span class="spacer"></span>
+                  <button
+                    class="chapter-remove"
+                    onclick={() => removeItem(item.key)}
+                    aria-label={`Retirer ${item.label}`}
+                    title="Retirer"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div class="chapter-slider">
+                  <input
+                    type="range"
+                    min="1"
+                    max={item.available}
+                    step="1"
+                    bind:value={picks[item.key]}
+                    aria-label={`Nombre de questions pour ${item.label}`}
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    max={item.available}
+                    step="1"
+                    bind:value={picks[item.key]}
+                    aria-label={`Nombre de questions pour ${item.label} (valeur)`}
+                  />
+                  <span class="muted small">q.</span>
+                </div>
               </div>
-            </section>
-          {/each}
+            {/each}
+          </div>
+        {:else}
+          <p class="muted">Aucun chapitre ajouté pour le moment.</p>
+        {/if}
+
+        <div>
+          <button
+            class="btn btn-ghost add-chapter"
+            onclick={openPicker}
+            disabled={pickerGroups.length === 0}
+          >
+            + Ajouter un chapitre
+          </button>
         </div>
 
         <div class="row setup-total">
           <span class="pill">
             Total : {totalPicked} question{totalPicked > 1 ? 's' : ''}
           </span>
-          <span class="spacer"></span>
           <label class="field">
             Secondes
             <input type="number" min="5" max="120" bind:value={seconds} />
@@ -426,6 +457,68 @@
         {#if selected.length > 0 && totalPicked === 0}
           <p class="muted small">Indiquez au moins une question.</p>
         {/if}
+
+        <div>
+          <button
+            class="btn btn-primary"
+            disabled={selected.length === 0 || totalPicked < 1}
+            onclick={create}
+          >
+            Créer la partie
+          </button>
+        </div>
+
+        <dialog
+          bind:this={pickerDialog}
+          class="picker-dialog"
+          onclose={() => (pickerOpen = false)}
+          aria-labelledby="picker-title"
+        >
+          <div class="stack">
+            <div class="row">
+              <h2 id="picker-title">Ajouter un chapitre</h2>
+              <span class="spacer"></span>
+              <button
+                class="btn btn-ghost picker-close"
+                onclick={() => (pickerOpen = false)}
+                aria-label="Fermer"
+                title="Fermer"
+              >
+                ×
+              </button>
+            </div>
+
+            {#if pickerGroups.length === 0}
+              <p class="muted">Aucun chapitre disponible.</p>
+            {:else}
+              <div class="picker-subjects">
+                {#each pickerGroups as subject}
+                  <section class="picker-group">
+                    <h3>
+                      {subject.title}
+                      <span class="muted small">{subject.question_count} questions</span>
+                    </h3>
+                    <div class="picker-list">
+                      {#each subject.items as item}
+                        {@const added = selected.includes(item.key)}
+                        <button
+                          class="picker-item"
+                          class:is-disabled={added}
+                          disabled={added}
+                          onclick={() => addItem(item)}
+                          title={added ? 'Déjà ajouté' : `Ajouter ${item.label}`}
+                        >
+                          <span>{item.label}</span>
+                          <span class="muted small">{added ? 'Ajouté' : item.available}</span>
+                        </button>
+                      {/each}
+                    </div>
+                  </section>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </dialog>
       </div>
     {:else if client.roomSeen}
       <div class="lobby-grid">

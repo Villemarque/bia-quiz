@@ -451,7 +451,7 @@ impl Room {
                 phase: self.phase,
                 code: self.code.clone(),
                 player_count: self.players.len(),
-                players: vec![],
+                players: self.player_views(),
             });
             if self.phase == Phase::Question {
                 if let Some(index) = self.index {
@@ -498,7 +498,7 @@ impl Room {
             phase: self.phase,
             code: self.code.clone(),
             player_count: self.players.len(),
-            players: vec![],
+            players: self.player_views(),
         });
         if self.phase == Phase::Question {
             if let Some(index) = self.index {
@@ -698,21 +698,23 @@ impl Room {
         }
     }
 
+    fn player_views(&self) -> Vec<PlayerView> {
+        self.players
+            .values()
+            .map(|p| PlayerView {
+                nickname: p.nickname.clone(),
+                points: p.points,
+            })
+            .collect()
+    }
+
     fn send_room_state_teacher(&self) {
         if let Some(tx) = &self.teacher_tx {
-            let players = self
-                .players
-                .values()
-                .map(|p| PlayerView {
-                    nickname: p.nickname.clone(),
-                    points: p.points,
-                })
-                .collect();
             let _ = tx.try_send(ServerMsg::RoomState {
                 phase: self.phase,
                 code: self.code.clone(),
                 player_count: self.players.len(),
-                players,
+                players: self.player_views(),
             });
         }
     }
@@ -724,7 +726,7 @@ impl Room {
                 phase: self.phase,
                 code: self.code.clone(),
                 player_count: self.players.len(),
-                players: vec![],
+                players: self.player_views(),
             });
         }
     }
