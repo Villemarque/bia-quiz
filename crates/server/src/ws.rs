@@ -4,7 +4,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -266,7 +266,8 @@ async fn create_room(
     chapters: Vec<ChapterPick>,
     seconds: u32,
 ) -> Result<RoomHandle, String> {
-    let mut merged: BTreeMap<(i32, Option<i32>), u32> = BTreeMap::new();
+    let mut merged: Vec<((i32, Option<i32>), u32)> = Vec::new();
+    let mut positions: HashMap<(i32, Option<i32>), usize> = HashMap::new();
     for pick in chapters {
         if pick.count == 0 {
             continue;
@@ -279,13 +280,18 @@ async fn create_room(
                 return Err("Chapitre invalide.".into());
             }
         }
-        let entry = merged.entry((pick.subject, pick.chapter)).or_default();
-        *entry = entry.saturating_add(pick.count);
+        let key = (pick.subject, pick.chapter);
+        if let Some(&index) = positions.get(&key) {
+            merged[index].1 = merged[index].1.saturating_add(pick.count);
+        } else {
+            positions.insert(key, merged.len());
+            merged.push((key, pick.count));
+        }
     }
     if merged.is_empty() {
         return Err("Choisissez au moins une sélection.".into());
     }
-    let requested: u64 = merged.values().map(|count| u64::from(*count)).sum();
+    let requested: u64 = merged.iter().map(|(_, count)| u64::from(*count)).sum();
     if requested == 0 {
         return Err("Choisissez au moins une question.".into());
     }
@@ -301,7 +307,7 @@ async fn create_room(
         }
     }
 
-    let picks: Vec<((i32, Option<i32>), u32)> = merged.into_iter().collect();
+    let picks: Vec<((i32, Option<i32>), u32)> = merged;
     let draw_picks: Vec<(i32, Option<i32>, usize)> = picks
         .iter()
         .map(|((subject, chapter), count)| (*subject, *chapter, *count as usize))

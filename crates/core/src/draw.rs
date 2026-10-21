@@ -20,6 +20,9 @@ pub fn draw_question_ids<R: Rng + ?Sized>(
 /// Draw up to `count` questions for each pick, without ever drawing the same
 /// question twice. A question that belongs to several picks contributes at most
 /// one quota; the caller gets fewer questions when a pool is short.
+///
+/// Questions are shuffled inside each pick, but the returned order follows the
+/// pick order so chapter blocks are preserved.
 pub fn draw_per_pick<R: Rng + ?Sized>(
     candidates: Vec<(usize, String)>,
     picks: &[(usize, usize)],
@@ -50,7 +53,6 @@ pub fn draw_per_pick<R: Rng + ?Sized>(
             }
         }
     }
-    chosen.shuffle(rng);
     chosen
 }
 
@@ -159,6 +161,21 @@ mod tests {
         assert_eq!(picked.len(), 3);
         let unique: HashSet<&String> = picked.iter().collect();
         assert_eq!(unique.len(), 3);
+    }
+
+    #[test]
+    fn per_pick_keeps_pick_order() {
+        let mut rng = StdRng::seed_from_u64(11);
+        let candidates = vec![
+            (1, "b0".to_string()),
+            (0, "a0".to_string()),
+            (1, "b1".to_string()),
+            (0, "a1".to_string()),
+        ];
+        let picked = draw_per_pick(candidates, &[(0, 1), (1, 1)], &mut rng);
+        assert_eq!(picked.len(), 2);
+        assert!(picked[0].starts_with('a'));
+        assert!(picked[1].starts_with('b'));
     }
 
     #[test]

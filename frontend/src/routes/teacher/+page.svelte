@@ -206,7 +206,9 @@
 
 <main class="teacher joy-bg">
   <header class="teacher-bar">
-    <span class="brand"><span class="brand-mark">✈</span> Quiz BIA</span>
+    <a class="brand" href="/" aria-label="Retour à l'accueil">
+      <span class="brand-mark">✈</span> Quiz BIA
+    </a>
     {#if client.joinUrl}
       <span class="join-bar">
         <span class="join-label">Rejoins à l'adresse</span>
@@ -286,9 +288,6 @@
         {/if}
         <button class="btn btn-ghost" onclick={endSession}>Terminer</button>
       {:else if client.roomSeen}
-        <button class="btn btn-primary" onclick={() => client.startQuestion()}>
-          Démarrer la question
-        </button>
         <button class="btn btn-ghost" onclick={endSession}>Terminer</button>
       {/if}
     </div>
@@ -548,6 +547,12 @@
             <div class="notice">{client.warning}</div>
           {/if}
         </div>
+      </div>
+
+      <div class="lobby-start">
+        <button class="btn btn-primary" onclick={() => client.startQuestion()}>
+          Démarrer le quiz
+        </button>
       </div>
     {:else}
       <p class="muted">Connexion au serveur…</p>

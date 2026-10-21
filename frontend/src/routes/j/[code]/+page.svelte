@@ -75,7 +75,9 @@
 
 <main class="student joy-bg">
   <header class="student-top">
-    <span class="brand"><span class="brand-mark">✈</span> Quiz BIA</span>
+    <a class="brand" href="/" aria-label="Retour à l'accueil">
+      <span class="brand-mark">✈</span> Quiz BIA
+    </a>
   </header>
 
   {#if !code}
