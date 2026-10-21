@@ -522,7 +522,7 @@
       </div>
     {:else if client.roomSeen}
       <div class="lobby-grid">
-        <div class="stack" style="align-items:flex-start">
+        <div class="stack lobby-join">
           <div class="join-link-card">
             <p class="join-link-label">Rejoindre sur</p>
             <p class="join-url mono">{client.joinUrl}</p>
@@ -536,7 +536,7 @@
           {/if}
         </div>
 
-        <div class="stack">
+        <div class="stack lobby-players">
           <h2>{client.playerCount} joueur(s)</h2>
           <div class="player-chips">
             {#each client.players as player}

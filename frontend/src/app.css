@@ -727,9 +727,22 @@ label {
 
 .lobby-grid {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(240px, 1fr);
   gap: 2rem;
   align-items: start;
+  width: 100%;
+  max-width: 1000px;
+  margin-inline: auto;
+}
+
+.lobby-join,
+.lobby-players {
+  align-items: center;
+  text-align: center;
+}
+
+.lobby-players .player-chips {
+  justify-content: center;
 }
 
 @media (max-width: 760px) {
