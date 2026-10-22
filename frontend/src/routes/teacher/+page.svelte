@@ -20,6 +20,8 @@
   let copied = $state(false);
   let pickerOpen = $state(false);
   let pickerDialog = $state<HTMLDialogElement>();
+  let answersOpen = $state(false);
+  let answersDialog = $state<HTMLDialogElement>();
 
   type PickItem = {
     key: string;
@@ -135,10 +137,24 @@
     client.reveal ? Math.max(1, ...client.reveal.counts) : 1,
   );
 
+  const answeredPlayers = $derived(
+    client.answerStatus.filter((player) => player.answered).map((player) => player.nickname),
+  );
+
+  const pendingPlayers = $derived(
+    client.answerStatus.filter((player) => !player.answered).map((player) => player.nickname),
+  );
+
   $effect(() => {
     if (!pickerDialog) return;
     if (pickerOpen && !pickerDialog.open) pickerDialog.showModal();
     else if (!pickerOpen && pickerDialog.open) pickerDialog.close();
+  });
+
+  $effect(() => {
+    if (!answersDialog) return;
+    if (answersOpen && !answersDialog.open) answersDialog.showModal();
+    else if (!answersOpen && answersDialog.open) answersDialog.close();
   });
 
   function openPicker(): void {
@@ -338,8 +354,70 @@
           {:else}
             <span class="spacer"></span>
           {/if}
-          <span class="pill">{client.answeredCount} / {client.playerCount} réponses</span>
+          <button class="pill pill-button" onclick={() => (answersOpen = true)}>
+            {client.answeredCount} / {client.playerCount} réponses
+          </button>
         </div>
+
+        <dialog
+          bind:this={answersDialog}
+          class="answers-dialog"
+          onclose={() => (answersOpen = false)}
+          aria-labelledby="answers-title"
+        >
+          <div class="stack">
+            <div class="row">
+              <h2 id="answers-title">Réponses</h2>
+              <span class="spacer"></span>
+              <button
+                class="btn btn-ghost answers-close"
+                onclick={() => (answersOpen = false)}
+                aria-label="Fermer"
+                title="Fermer"
+              >
+                ×
+              </button>
+            </div>
+
+            <p class="muted">
+              {client.answeredCount} / {client.playerCount} ont répondu.
+            </p>
+
+            {#if client.answerStatus.length === 0}
+              <p class="muted">Aucun joueur connecté.</p>
+            {:else}
+              <div class="answer-status-groups">
+                <section>
+                  <h3>
+                    Ont répondu
+                    <span class="muted small">{answeredPlayers.length}</span>
+                  </h3>
+                  <div class="answer-status-list">
+                    {#each answeredPlayers as nickname}
+                      <span class="answer-status answered">{nickname}</span>
+                    {:else}
+                      <span class="muted small">Personne pour le moment.</span>
+                    {/each}
+                  </div>
+                </section>
+
+                <section>
+                  <h3>
+                    Pas encore
+                    <span class="muted small">{pendingPlayers.length}</span>
+                  </h3>
+                  <div class="answer-status-list">
+                    {#each pendingPlayers as nickname}
+                      <span class="answer-status pending">{nickname}</span>
+                    {:else}
+                      <span class="muted small">Tout le monde a répondu.</span>
+                    {/each}
+                  </div>
+                </section>
+              </div>
+            {/if}
+          </div>
+        </dialog>
 
         <p class="question-text">{client.question.text}</p>
 

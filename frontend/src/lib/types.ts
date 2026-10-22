@@ -16,6 +16,11 @@ export interface Score {
   points: number;
 }
 
+export interface PlayerAnswer {
+  nickname: string;
+  answered: boolean;
+}
+
 export interface QuestionStart {
   type: 'question.start';
   index: number;

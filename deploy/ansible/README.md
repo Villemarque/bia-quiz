@@ -224,7 +224,11 @@ bia_app_port: 8080             # must match [server].bind in bia.toml
   ```
   <bia_domain> {
       log {
-          output stdout
+          output file /var/log/caddy/access.log {
+              roll_size 10MiB
+              roll_keep 5
+              roll_keep_for 720h
+          }
           format console
       }
       encode gzip
@@ -232,7 +236,8 @@ bia_app_port: 8080             # must match [server].bind in bia.toml
   }
   ```
 - Caddy handles the WebSocket upgrade, HTTP→HTTPS redirect and certificate renewal.
-- Access logs go to stdout, i.e. `journalctl -u caddy -f`.
+- Access logs go to `/var/log/caddy/access.log` (rotated by Caddy); `journalctl -u caddy`
+  only shows the service's short messages.
 - Set `bia_enable_caddy: false` if Caddy is managed elsewhere.
 - The role fails fast if `bia_domain` is empty or `bia_app_port` is invalid.
 - Rate limiting stays in the application, not in Caddy.

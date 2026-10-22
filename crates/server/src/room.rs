@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use bia_core::draw::{identity_order, order_to_string, shuffle_order};
 use bia_core::models::{AnswerState, NewAnswer, Question};
-use bia_core::protocol::{ChoiceView, Phase, PlayerView, ScoreView, ServerMsg};
+use bia_core::protocol::{ChoiceView, Phase, PlayerAnswerView, PlayerView, ScoreView, ServerMsg};
 use rand::Rng;
 use tokio::sync::{mpsc, oneshot};
 
@@ -189,6 +189,7 @@ impl Room {
                             self.send_paused(true, self.paused_remaining);
                         }
                     }
+                    self.send_current_answers_status();
                 }
                 Cmd::Teacher(cmd) => self.handle_teacher(cmd).await,
                 Cmd::StudentJoin {
@@ -298,10 +299,7 @@ impl Room {
         self.paused_remaining = None;
 
         self.send_question_all(&question, next);
-        self.send_teacher(ServerMsg::AnswersCount {
-            count: 0,
-            total: self.players.len(),
-        });
+        self.send_current_answers_status();
         self.send_room_state_all();
         self.schedule(question_seconds as i64 * 1000);
     }
@@ -466,6 +464,7 @@ impl Room {
                 }
             }
             self.send_room_state_teacher();
+            self.send_current_answers_status();
             return Ok(existing_id);
         }
 
@@ -507,6 +506,7 @@ impl Room {
             }
         }
         self.send_room_state_teacher();
+        self.send_current_answers_status();
         Ok(id)
     }
 
@@ -606,15 +606,7 @@ impl Room {
         if let Some(tx) = self.student_txs.get(&player_id) {
             let _ = tx.try_send(ServerMsg::AnswerSaved { choice });
         }
-        let count = self
-            .answers
-            .keys()
-            .filter(|(pos, _)| *pos == position)
-            .count();
-        self.send_teacher(ServerMsg::AnswersCount {
-            count,
-            total: self.players.len(),
-        });
+        self.send_current_answers_status();
         Ok(())
     }
 
@@ -728,6 +720,36 @@ impl Room {
                 player_count: self.players.len(),
                 players: self.player_views(),
             });
+        }
+    }
+
+    fn answer_views(&self, position: usize) -> Vec<PlayerAnswerView> {
+        let mut players: Vec<PlayerAnswerView> = self
+            .players
+            .iter()
+            .map(|(id, player)| PlayerAnswerView {
+                nickname: player.nickname.clone(),
+                answered: self.answers.contains_key(&(position, *id)),
+            })
+            .collect();
+        players.sort_by(|a, b| a.nickname.cmp(&b.nickname));
+        players
+    }
+
+    fn send_answers_status(&self, position: usize) {
+        let players = self.answer_views(position);
+        self.send_teacher(ServerMsg::AnswersCount {
+            count: players.iter().filter(|player| player.answered).count(),
+            total: players.len(),
+            players,
+        });
+    }
+
+    fn send_current_answers_status(&self) {
+        if matches!(self.phase, Phase::Question | Phase::RevealAnswer) {
+            if let Some(position) = self.index {
+                self.send_answers_status(position);
+            }
         }
     }
 

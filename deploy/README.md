@@ -420,7 +420,11 @@ Caddy was installed and configured by the Ansible `caddy` role in §2.5. It serv
 ```
 <bia_domain> {
     log {
-        output stdout
+        output file /var/log/caddy/access.log {
+            roll_size 10MiB
+            roll_keep 5
+            roll_keep_for 720h
+        }
         format console
     }
     encode gzip
@@ -428,10 +432,13 @@ Caddy was installed and configured by the Ansible `caddy` role in §2.5. It serv
 }
 ```
 
-Access logs go to stdout, so they are captured by journald:
+Access logs go to `/var/log/caddy/access.log` and are rotated by Caddy (10 MiB,
+5 files, 30 days). `journalctl -u caddy` now only shows Caddy's short service
+messages:
 
 ```sh
-journalctl -u caddy -f
+sudo tail -f /var/log/caddy/access.log   # access log
+journalctl -u caddy -f                   # service log
 ```
 
 Caddy obtains the certificate automatically (ports 80/443 open, DNS correct) and proxies
@@ -529,7 +536,8 @@ sudo systemctl start bia-quiz
 
 ## 11. Operations
 
-- Logs: `journalctl -u bia-quiz -f`, `journalctl -u caddy -f`, `journalctl -u fail2ban -f`.
+- Logs: `journalctl -u bia-quiz -f`, `journalctl -u caddy -f` (service),
+  `sudo tail -f /var/log/caddy/access.log` (access), `journalctl -u fail2ban -f`.
 - Health: `curl -fsS https://…/healthz`; point an uptime monitor at it.
 - Disk: `df -h /var`; the DB grows with results (indefinitely, current policy).
 - Time: `timedatectl` (NTP on) — speed scoring uses the server clock.
@@ -569,7 +577,7 @@ sudo systemctl start bia-quiz
 | import returns 409 | a room is live, or another import is running |
 | login always fails | empty/incorrect `[prof]`/`[admin]` password, or 5 failed attempts (15 min) |
 | QR code points to `localhost` | `public_base_url` not set to the HTTPS domain |
-| WebSocket disconnects | Caddy proxies `/ws`; check the browser console and `journalctl -u caddy` |
+| WebSocket disconnects | Caddy proxies `/ws`; check the browser console, `sudo tail -f /var/log/caddy/access.log` and `journalctl -u caddy` |
 | `database is locked` | another import or a long write; retry after the import; WAL + 5 s busy timeout |
 | Import downloads fail | no outbound HTTPS; use the CLI fallback in §5 with local TSV/figures |
 | Disk full after months | results grow; prune sessions or increase the disk; check `/var/lib/bia-quiz` |

@@ -57,6 +57,15 @@
     cache_valid_time: 3600
   when: bia_enable_caddy | bool
 
+- name: Create the Caddy log directory
+  ansible.builtin.file:
+    path: /var/log/caddy
+    state: directory
+    owner: caddy
+    group: caddy
+    mode: "0750"
+  when: bia_enable_caddy | bool
+
 - name: Write the Caddyfile
   ansible.builtin.template:
     src: Caddyfile.j2

@@ -72,6 +72,12 @@ pub struct PlayerView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayerAnswerView {
+    pub nickname: String,
+    pub answered: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMsg {
     #[serde(rename = "hello")]
@@ -110,7 +116,11 @@ pub enum ServerMsg {
     },
 
     #[serde(rename = "answers.count")]
-    AnswersCount { count: usize, total: usize },
+    AnswersCount {
+        count: usize,
+        total: usize,
+        players: Vec<PlayerAnswerView>,
+    },
 
     #[serde(rename = "paused")]
     Paused {

@@ -1,6 +1,14 @@
 import { JsonSocket } from '$lib/ws';
 import { readSession, writeLocal, writeSession } from '$lib/env';
-import type { ChapterPick, Phase, QuestionStart, Reveal, Score, SessionEnd } from '$lib/types';
+import type {
+  ChapterPick,
+  Phase,
+  PlayerAnswer,
+  QuestionStart,
+  Reveal,
+  Score,
+  SessionEnd,
+} from '$lib/types';
 
 type Role = 'teacher' | 'student';
 
@@ -35,6 +43,7 @@ export class QuizClient {
   answer = $state<number | null>(null);
   result = $state<boolean | null>(null);
   answeredCount = $state(0);
+  answerStatus = $state<PlayerAnswer[]>([]);
   error = $state('');
   remaining = $state(0);
   token = $state('');
@@ -123,6 +132,7 @@ export class QuizClient {
         this.result = null;
         this.answer = null;
         this.answeredCount = 0;
+        this.answerStatus = [];
         this.previousLeaderboard = [...this.leaderboard];
         this.previousPoints = Object.fromEntries(
           this.players.map((player) => [player.nickname, player.points]),
@@ -133,6 +143,9 @@ export class QuizClient {
         break;
       case 'answers.count':
         this.answeredCount = message.count;
+        if (Array.isArray(message.players)) {
+          this.answerStatus = message.players;
+        }
         break;
       case 'answer.saved':
         this.answer = message.choice;
