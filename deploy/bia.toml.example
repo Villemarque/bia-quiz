@@ -4,6 +4,9 @@ public_base_url = "https://quiz.asso-triple-a.org"
 max_players = 60
 # Room code length (numeric, default 3).
 join_code_length = 3
+# End a game session after this many seconds without activity (default 3600,
+# 0 disables).
+session_idle_seconds = 3600
 # Public URL of the deployed source (AGPL-3.0 network-use obligation).
 source_url = "https://github.com/Villemarque/bia-quiz"
 

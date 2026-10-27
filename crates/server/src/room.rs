@@ -4,7 +4,7 @@
 //! writes are awaited through `Db::call` (a blocking task on one SQLite connection).
 
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bia_core::draw::{identity_order, order_to_string, shuffle_order};
 use bia_core::models::{AnswerState, NewAnswer, Question};
@@ -110,6 +110,8 @@ pub struct RoomSpec {
     pub seconds: u32,
     pub max_players: usize,
     pub questions: Vec<Question>,
+    /// End the session on its own when nothing happens for this long.
+    pub idle_timeout: Option<Duration>,
 }
 
 struct PlayerState {
@@ -138,6 +140,7 @@ struct Room {
     student_txs: HashMap<i32, ClientTx>,
     cmd_tx: mpsc::Sender<Cmd>,
     generation: u64,
+    idle_timeout: Option<Duration>,
     closed: bool,
 }
 
@@ -167,6 +170,7 @@ pub fn spawn(spec: RoomSpec, teacher_tx: ClientTx) -> RoomHandle {
         student_txs: HashMap::new(),
         cmd_tx: tx,
         generation: 0,
+        idle_timeout: spec.idle_timeout,
         closed: false,
     };
     tokio::spawn(room.run(rx));
@@ -175,50 +179,72 @@ pub fn spawn(spec: RoomSpec, teacher_tx: ClientTx) -> RoomHandle {
 
 impl Room {
     async fn run(mut self, mut rx: mpsc::Receiver<Cmd>) {
-        while let Some(cmd) = rx.recv().await {
-            match cmd {
-                Cmd::TeacherAttach(tx) => {
-                    self.teacher_tx = Some(tx);
-                    self.send_room_state_teacher();
-                    if self.phase == Phase::Question {
-                        if let Some(index) = self.index {
-                            let q = self.questions[index].clone();
-                            self.send_question_teacher(&q, index);
+        loop {
+            // Re-armed after every command, so the delay is measured from the last
+            // activity in the room. `None` disables the guard entirely.
+            let idle_timeout = self.idle_timeout;
+            let idle = async move {
+                match idle_timeout {
+                    Some(timeout) => tokio::time::sleep(timeout).await,
+                    None => std::future::pending().await,
+                }
+            };
+
+            tokio::select! {
+                message = rx.recv() => {
+                    let Some(cmd) = message else { break };
+                    match cmd {
+                        Cmd::TeacherAttach(tx) => {
+                            self.teacher_tx = Some(tx);
+                            self.send_room_state_teacher();
+                            if self.phase == Phase::Question {
+                                if let Some(index) = self.index {
+                                    let q = self.questions[index].clone();
+                                    self.send_question_teacher(&q, index);
+                                }
+                                if self.paused_remaining.is_some() {
+                                    self.send_paused(true, self.paused_remaining);
+                                }
+                            }
+                            self.send_current_answers_status();
                         }
-                        if self.paused_remaining.is_some() {
-                            self.send_paused(true, self.paused_remaining);
+                        Cmd::Teacher(cmd) => self.handle_teacher(cmd).await,
+                        Cmd::StudentJoin {
+                            tx,
+                            token,
+                            nickname,
+                            reply,
+                        } => {
+                            let result = self.join_student(tx, token, nickname).await;
+                            let _ = reply.send(result);
+                        }
+                        Cmd::Answer { player_id, choice } => {
+                            if let Err(message) = self.answer(player_id, choice).await {
+                                if let Some(tx) = self.student_txs.get(&player_id) {
+                                    let _ = tx.try_send(ServerMsg::Error { message });
+                                }
+                            }
+                        }
+                        Cmd::StudentDetach { player_id } => {
+                            self.student_txs.remove(&player_id);
+                        }
+                        Cmd::Timer { generation } => {
+                            if generation == self.generation {
+                                match self.phase {
+                                    Phase::Question => self.reveal(),
+                                    Phase::RevealAnswer => self.show_leaderboard(),
+                                    _ => {}
+                                }
+                            }
                         }
                     }
-                    self.send_current_answers_status();
                 }
-                Cmd::Teacher(cmd) => self.handle_teacher(cmd).await,
-                Cmd::StudentJoin {
-                    tx,
-                    token,
-                    nickname,
-                    reply,
-                } => {
-                    let result = self.join_student(tx, token, nickname).await;
-                    let _ = reply.send(result);
-                }
-                Cmd::Answer { player_id, choice } => {
-                    if let Err(message) = self.answer(player_id, choice).await {
-                        if let Some(tx) = self.student_txs.get(&player_id) {
-                            let _ = tx.try_send(ServerMsg::Error { message });
-                        }
-                    }
-                }
-                Cmd::StudentDetach { player_id } => {
-                    self.student_txs.remove(&player_id);
-                }
-                Cmd::Timer { generation } => {
-                    if generation == self.generation {
-                        match self.phase {
-                            Phase::Question => self.reveal(),
-                            Phase::RevealAnswer => self.show_leaderboard(),
-                            _ => {}
-                        }
-                    }
+                _ = idle => {
+                    tracing::info!(
+                        session_id = self.session_id,
+                        "room idle for too long, ending the session"
+                    );
+                    self.end().await;
                 }
             }
             if self.closed {

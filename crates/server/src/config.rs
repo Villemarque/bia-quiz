@@ -23,6 +23,9 @@ pub struct ServerConfig {
     pub max_players: usize,
     /// Number of characters in a room code.
     pub join_code_length: usize,
+    /// End a game session on its own after this many seconds without activity.
+    /// `0` disables the guard.
+    pub session_idle_seconds: u64,
     /// Public URL of the deployed source (AGPL network-use obligation).
     pub source_url: String,
 }
@@ -85,6 +88,7 @@ impl Default for ServerConfig {
             public_base_url: "http://localhost:8080".into(),
             max_players: 60,
             join_code_length: 3,
+            session_idle_seconds: 3600,
             source_url: "https://github.com/Villemarque/bia-quiz".into(),
         }
     }
@@ -149,6 +153,9 @@ impl Config {
         }
         if let Some(v) = env("BIA_QUIZ_JOIN_CODE_LENGTH") {
             cfg.server.join_code_length = v.parse()?;
+        }
+        if let Some(v) = env("BIA_QUIZ_SESSION_IDLE_SECONDS") {
+            cfg.server.session_idle_seconds = v.parse()?;
         }
         if let Some(v) = env("BIA_QUIZ_DB_PATH") {
             cfg.db.path = v.into();

@@ -108,6 +108,7 @@ an environment variable:
 | `server.public_base_url` | `BIA_QUIZ_PUBLIC_BASE_URL` | `http://localhost:8080` |
 | `server.max_players` | `BIA_QUIZ_MAX_PLAYERS` | `60` |
 | `server.join_code_length` | `BIA_QUIZ_JOIN_CODE_LENGTH` | `3` |
+| `server.session_idle_seconds` | `BIA_QUIZ_SESSION_IDLE_SECONDS` | `3600` (`0` disables; ends an inactive game session) |
 | `server.source_url` | `BIA_QUIZ_SOURCE_URL` | `https://github.com/Villemarque/bia-quiz` (AGPL footer link) |
 | `db.path` | `BIA_QUIZ_DB_PATH` | `bia.sqlite3` |
 | `auth.session_hours` | `BIA_QUIZ_SESSION_HOURS` | `12` |

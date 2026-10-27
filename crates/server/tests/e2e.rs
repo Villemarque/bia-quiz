@@ -78,14 +78,7 @@ async fn send(ws: &mut Ws, value: serde_json::Value) {
         .expect("send");
 }
 
-#[tokio::test]
-async fn full_question_flow() {
-    let dir = tempfile::tempdir().unwrap();
-    let db = Db::open(&dir.path().join("test.sqlite3")).unwrap();
-    seed(&db).await;
-
-    let mut config = Config::default();
-    config.server.public_base_url = "http://test.local".into();
+async fn start_server(db: &Db, config: Config) -> String {
     let state = AppState {
         cfg: Arc::new(config),
         db: db.clone(),
@@ -110,14 +103,31 @@ async fn full_question_flow() {
         .unwrap();
     });
 
-    let base = format!("ws://{addr}/ws");
+    format!("ws://{addr}/ws")
+}
+
+async fn teacher_socket(base: &str) -> Ws {
     let mut request = format!("{base}?role=teacher")
         .into_client_request()
         .unwrap();
     request
         .headers_mut()
         .insert("origin", HeaderValue::from_static("http://test.local"));
-    let (mut teacher, _) = connect_async(request).await.unwrap();
+    let (teacher, _) = connect_async(request).await.unwrap();
+    teacher
+}
+
+#[tokio::test]
+async fn full_question_flow() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::open(&dir.path().join("test.sqlite3")).unwrap();
+    seed(&db).await;
+
+    let mut config = Config::default();
+    config.server.public_base_url = "http://test.local".into();
+    let base = start_server(&db, config).await;
+
+    let mut teacher = teacher_socket(&base).await;
     assert_eq!(next_json(&mut teacher, "hello").await["type"], "hello");
 
     send(
@@ -211,4 +221,46 @@ async fn full_question_flow() {
         points > 500,
         "fast correct answer should score high, got {points}"
     );
+}
+
+#[tokio::test]
+async fn idle_session_ends_automatically() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::open(&dir.path().join("test.sqlite3")).unwrap();
+    seed(&db).await;
+
+    let mut config = Config::default();
+    config.server.public_base_url = "http://test.local".into();
+    config.server.session_idle_seconds = 1;
+    let base = start_server(&db, config).await;
+
+    let mut teacher = teacher_socket(&base).await;
+    assert_eq!(next_json(&mut teacher, "hello").await["type"], "hello");
+    send(
+        &mut teacher,
+        serde_json::json!({
+            "type": "teacher.create",
+            "chapters": [{ "subject": 2, "chapter": 0, "count": 1 }],
+            "seconds": 5
+        }),
+    )
+    .await;
+    let _ = wait_for(&mut teacher, "room.created").await;
+
+    // Nothing else happens: the room should end itself once the grace period
+    // elapsed, without the teacher pressing "end".
+    let _ = wait_for(&mut teacher, "session.end").await;
+
+    let ended_at: Option<i64> = db
+        .call(|conn| {
+            Ok(diesel::select(diesel::dsl::sql::<
+                diesel::sql_types::Nullable<diesel::sql_types::BigInt>,
+            >(
+                "ended_at FROM sessions ORDER BY id DESC LIMIT 1"
+            ))
+            .get_result::<Option<i64>>(conn)?)
+        })
+        .await
+        .unwrap();
+    assert!(ended_at.is_some(), "idle session should be marked finished");
 }

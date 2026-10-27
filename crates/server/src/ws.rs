@@ -358,6 +358,8 @@ async fn create_room(
             seconds,
             max_players: state.cfg.server.max_players,
             questions,
+            idle_timeout: (state.cfg.server.session_idle_seconds > 0)
+                .then(|| Duration::from_secs(state.cfg.server.session_idle_seconds)),
         },
         tx.clone(),
     );
