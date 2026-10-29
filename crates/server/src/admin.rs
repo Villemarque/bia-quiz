@@ -14,6 +14,7 @@ use diesel::prelude::*;
 use serde::Serialize;
 
 use crate::auth::AdminUser;
+use crate::room::TeacherCmd;
 use crate::{db, AppState};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
@@ -64,6 +65,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/admin/stats", get(stats))
         .route("/api/admin/import", get(job_view).post(start_import))
         .route("/api/admin/import/report.txt", get(report_txt))
+        .route("/api/admin/room/end", axum::routing::post(end_room))
 }
 
 fn now_ms() -> i64 {
@@ -80,6 +82,23 @@ fn conflict(message: &str) -> Response {
 async fn room_is_live(state: &AppState) -> bool {
     let guard = state.room.lock().await;
     guard.as_ref().map(|room| room.is_alive()).unwrap_or(false)
+}
+
+/// End the live game exactly like the teacher's "Terminer" button: the room
+/// broadcasts the podium and writes `ended_at` in the database.
+async fn end_room(_user: AdminUser, State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if !crate::auth::same_origin(&headers, &state.cfg.server.public_base_url) {
+        return (StatusCode::FORBIDDEN, "Requête refusée.").into_response();
+    }
+    let room = {
+        let guard = state.room.lock().await;
+        guard.as_ref().filter(|room| room.is_alive()).cloned()
+    };
+    let Some(room) = room else {
+        return (StatusCode::NOT_FOUND, "Aucune partie en cours.").into_response();
+    };
+    room.teacher(TeacherCmd::End);
+    StatusCode::ACCEPTED.into_response()
 }
 
 async fn stats(_user: AdminUser, State(state): State<AppState>) -> Response {

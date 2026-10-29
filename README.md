@@ -14,6 +14,13 @@ question the projector shows the answer then the top 7; the session ends with a 
 - **Deploy:** one self-contained binary (SPA + migrations embedded, SQLite bundled) + one SQLite file (questions, figures, results) + systemd + Caddy.
 - **Docs:** English (code and README); UI strings are French.
 
+Reloading a game keeps your seat: students reconnect with a per-room token in
+`localStorage`, and the teacher console replays the current question, reveal or
+leaderboard. If a student's token is gone (private browsing, storage cleared), the
+server recovers the same player when the join comes from the same client IP **and**
+uses the same nickname (case-insensitive). That address only lives in memory for the
+duration of the live room; it is never written to SQLite.
+
 ## Layout
 
 ```
@@ -45,7 +52,7 @@ BIA_QUIZ_PROF_PASSWORD=dev BIA_QUIZ_ADMIN_PASSWORD=dev ./target/release/bia-quiz
 
 Open <http://localhost:8080>: the landing page joins a game, `/teacher` starts one,
 `/login` signs in, `/prof` reads stored results (any account), `/admin` imports the bank
-(admin account only).
+and can end the live game (admin account only).
 
 The release binary embeds `frontend/dist` at compile time. Figures are stored in SQLite
 by `bia-import` and served from the database at runtime.

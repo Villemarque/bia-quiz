@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { QuizClient } from '$lib/stores/quiz.svelte';
+  import { QuizClient, playerTokenKey } from '$lib/stores/quiz.svelte';
   import { readLocal, writeLocal } from '$lib/env';
   import { fetchRoom } from '$lib/api';
   import AnswerTile from '$lib/components/AnswerTile.svelte';
@@ -16,6 +16,7 @@
 
   onMount(() => {
     let stopped = false;
+    const token = readLocal(playerTokenKey(code));
     fetchRoom()
       .then((status) => {
         if (stopped) return;
@@ -24,6 +25,8 @@
           return;
         }
         checking = false;
+        // A reload of a game we already joined reconnects silently.
+        if (token && nickname) start(nickname);
       })
       .catch(() => {
         if (stopped) return;
@@ -41,7 +44,7 @@
     nickname = clean;
     writeLocal('bia-nickname', clean);
     started = true;
-    client.connectStudent(code, readLocal('bia-token'), clean);
+    client.connectStudent(code, readLocal(playerTokenKey(code)), clean);
   }
 
   function submit(event: SubmitEvent): void {

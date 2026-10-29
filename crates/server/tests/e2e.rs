@@ -106,10 +106,12 @@ async fn start_server(db: &Db, config: Config) -> String {
     format!("ws://{addr}/ws")
 }
 
-async fn teacher_socket(base: &str) -> Ws {
-    let mut request = format!("{base}?role=teacher")
-        .into_client_request()
-        .unwrap();
+async fn teacher_socket(base: &str, room: Option<&str>) -> Ws {
+    let path = match room {
+        Some(room) => format!("{base}?role=teacher&room={room}"),
+        None => format!("{base}?role=teacher"),
+    };
+    let mut request = path.into_client_request().unwrap();
     request
         .headers_mut()
         .insert("origin", HeaderValue::from_static("http://test.local"));
@@ -127,7 +129,7 @@ async fn full_question_flow() {
     config.server.public_base_url = "http://test.local".into();
     let base = start_server(&db, config).await;
 
-    let mut teacher = teacher_socket(&base).await;
+    let mut teacher = teacher_socket(&base, None).await;
     assert_eq!(next_json(&mut teacher, "hello").await["type"], "hello");
 
     send(
@@ -234,7 +236,7 @@ async fn idle_session_ends_automatically() {
     config.server.session_idle_seconds = 1;
     let base = start_server(&db, config).await;
 
-    let mut teacher = teacher_socket(&base).await;
+    let mut teacher = teacher_socket(&base, None).await;
     assert_eq!(next_json(&mut teacher, "hello").await["type"], "hello");
     send(
         &mut teacher,
@@ -263,4 +265,256 @@ async fn idle_session_ends_automatically() {
         .await
         .unwrap();
     assert!(ended_at.is_some(), "idle session should be marked finished");
+}
+
+#[tokio::test]
+async fn student_reload_reconnects_to_same_player() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::open(&dir.path().join("test.sqlite3")).unwrap();
+    seed(&db).await;
+    // Keep the question open long enough to reconnect while it is running.
+    db.call(|conn| {
+        diesel::sql_query("UPDATE questions SET seconds = 60").execute(conn)?;
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    let mut config = Config::default();
+    config.server.public_base_url = "http://test.local".into();
+    let base = start_server(&db, config).await;
+
+    let mut teacher = teacher_socket(&base, None).await;
+    assert_eq!(next_json(&mut teacher, "hello").await["type"], "hello");
+    send(
+        &mut teacher,
+        serde_json::json!({
+            "type": "teacher.create",
+            "chapters": [{ "subject": 2, "chapter": 0, "count": 1 }],
+            "seconds": 5
+        }),
+    )
+    .await;
+    let created = wait_for(&mut teacher, "room.created").await;
+    let code = created["code"].as_str().unwrap().to_string();
+
+    let mut student = connect_async(format!("{base}?role=student&room={code}"))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(next_json(&mut student, "hello").await["type"], "hello");
+    send(
+        &mut student,
+        serde_json::json!({ "type": "student.join", "nickname": "Max" }),
+    )
+    .await;
+    let welcome = wait_for(&mut student, "player.welcome").await;
+    let token = welcome["token"].as_str().unwrap().to_string();
+
+    send(
+        &mut teacher,
+        serde_json::json!({ "type": "teacher.start_question" }),
+    )
+    .await;
+    let _ = wait_for(&mut student, "question.start").await;
+    send(
+        &mut student,
+        serde_json::json!({ "type": "student.answer", "choice": 0 }),
+    )
+    .await;
+    let _ = wait_for(&mut student, "answer.saved").await;
+
+    // Same token on a new socket: the server must reuse the existing player and
+    // replay the running question with the answer already given.
+    let mut reloaded = connect_async(format!("{base}?role=student&room={code}&token={token}"))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(next_json(&mut reloaded, "hello").await["type"], "hello");
+    send(
+        &mut reloaded,
+        serde_json::json!({ "type": "student.join", "nickname": "Max" }),
+    )
+    .await;
+
+    let welcome = wait_for(&mut reloaded, "player.welcome").await;
+    assert_eq!(welcome["token"], token);
+    let state = wait_for(&mut reloaded, "room.state").await;
+    assert_eq!(
+        state["player_count"], 1,
+        "reconnecting must not add a second player"
+    );
+    let question = wait_for(&mut reloaded, "question.start").await;
+    assert_eq!(question["text"], "Quel est le bon choix ?");
+    let saved = wait_for(&mut reloaded, "answer.saved").await;
+    assert_eq!(saved["choice"], 0);
+}
+
+#[tokio::test]
+async fn student_without_token_is_recognised_by_ip_and_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::open(&dir.path().join("test.sqlite3")).unwrap();
+    seed(&db).await;
+    // Keep the question open while the test reconnects several times.
+    db.call(|conn| {
+        diesel::sql_query("UPDATE questions SET seconds = 60").execute(conn)?;
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    let mut config = Config::default();
+    config.server.public_base_url = "http://test.local".into();
+    let base = start_server(&db, config).await;
+
+    let mut teacher = teacher_socket(&base, None).await;
+    assert_eq!(next_json(&mut teacher, "hello").await["type"], "hello");
+    send(
+        &mut teacher,
+        serde_json::json!({
+            "type": "teacher.create",
+            "chapters": [{ "subject": 2, "chapter": 0, "count": 1 }],
+            "seconds": 5
+        }),
+    )
+    .await;
+    let created = wait_for(&mut teacher, "room.created").await;
+    let code = created["code"].as_str().unwrap().to_string();
+
+    let mut student = connect_async(format!("{base}?role=student&room={code}"))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(next_json(&mut student, "hello").await["type"], "hello");
+    send(
+        &mut student,
+        serde_json::json!({ "type": "student.join", "nickname": "Max" }),
+    )
+    .await;
+    let welcome = wait_for(&mut student, "player.welcome").await;
+    let token = welcome["token"].as_str().unwrap().to_string();
+
+    send(
+        &mut teacher,
+        serde_json::json!({ "type": "teacher.start_question" }),
+    )
+    .await;
+    let _ = wait_for(&mut student, "question.start").await;
+    send(
+        &mut student,
+        serde_json::json!({ "type": "student.answer", "choice": 0 }),
+    )
+    .await;
+    let _ = wait_for(&mut student, "answer.saved").await;
+
+    // Lost token, same address, same name (case-insensitive): same player.
+    let mut recovered = connect_async(format!("{base}?role=student&room={code}&token=deadbeef"))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(next_json(&mut recovered, "hello").await["type"], "hello");
+    send(
+        &mut recovered,
+        serde_json::json!({ "type": "student.join", "nickname": "max" }),
+    )
+    .await;
+    let welcome = wait_for(&mut recovered, "player.welcome").await;
+    assert_eq!(welcome["token"], token, "the existing player is recovered");
+    let state = wait_for(&mut recovered, "room.state").await;
+    assert_eq!(state["player_count"], 1);
+    let _ = wait_for(&mut recovered, "question.start").await;
+    let saved = wait_for(&mut recovered, "answer.saved").await;
+    assert_eq!(saved["choice"], 0);
+
+    // A different name from the same address is a new player.
+    let mut other = connect_async(format!("{base}?role=student&room={code}"))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(next_json(&mut other, "hello").await["type"], "hello");
+    send(
+        &mut other,
+        serde_json::json!({ "type": "student.join", "nickname": "Léo" }),
+    )
+    .await;
+    let welcome = wait_for(&mut other, "player.welcome").await;
+    assert_ne!(welcome["token"], token);
+    let state = wait_for(&mut other, "room.state").await;
+    assert_eq!(state["player_count"], 2);
+}
+
+#[tokio::test]
+async fn teacher_reload_restores_current_view() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::open(&dir.path().join("test.sqlite3")).unwrap();
+    seed(&db).await;
+
+    let mut config = Config::default();
+    config.server.public_base_url = "http://test.local".into();
+    let base = start_server(&db, config).await;
+
+    let mut teacher = teacher_socket(&base, None).await;
+    assert_eq!(next_json(&mut teacher, "hello").await["type"], "hello");
+    send(
+        &mut teacher,
+        serde_json::json!({
+            "type": "teacher.create",
+            "chapters": [{ "subject": 2, "chapter": 0, "count": 1 }],
+            "seconds": 5
+        }),
+    )
+    .await;
+    let created = wait_for(&mut teacher, "room.created").await;
+    let code = created["code"].as_str().unwrap().to_string();
+
+    let mut student = connect_async(format!("{base}?role=student&room={code}"))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(next_json(&mut student, "hello").await["type"], "hello");
+    send(
+        &mut student,
+        serde_json::json!({ "type": "student.join", "nickname": "Max" }),
+    )
+    .await;
+    let _ = wait_for(&mut student, "player.welcome").await;
+
+    send(
+        &mut teacher,
+        serde_json::json!({ "type": "teacher.start_question" }),
+    )
+    .await;
+    let _ = wait_for(&mut student, "question.start").await;
+    send(
+        &mut student,
+        serde_json::json!({ "type": "student.answer", "choice": 0 }),
+    )
+    .await;
+    let _ = wait_for(&mut student, "answer.saved").await;
+    let _ = wait_for(&mut teacher, "question.reveal").await;
+
+    // Reload during the reveal: question and counts are replayed.
+    let mut reloaded = teacher_socket(&base, Some(&code)).await;
+    assert_eq!(next_json(&mut reloaded, "hello").await["type"], "hello");
+    let state = wait_for(&mut reloaded, "room.state").await;
+    assert_eq!(state["phase"], "reveal_answer");
+    let question = wait_for(&mut reloaded, "question.start").await;
+    assert_eq!(question["text"], "Quel est le bon choix ?");
+    let reveal = wait_for(&mut reloaded, "question.reveal").await;
+    assert_eq!(reveal["counts"][0], 1, "the reveal counts are replayed");
+
+    send(
+        &mut reloaded,
+        serde_json::json!({ "type": "teacher.show_leaderboard" }),
+    )
+    .await;
+    let _ = wait_for(&mut reloaded, "leaderboard").await;
+
+    // Reload again during the leaderboard.
+    let mut again = teacher_socket(&base, Some(&code)).await;
+    let _ = next_json(&mut again, "hello").await;
+    let state = wait_for(&mut again, "room.state").await;
+    assert_eq!(state["phase"], "reveal_leaderboard");
+    let leaderboard = wait_for(&mut again, "leaderboard").await;
+    assert_eq!(leaderboard["top"][0]["nickname"], "Max");
 }

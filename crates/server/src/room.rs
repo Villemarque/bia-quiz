@@ -4,6 +4,7 @@
 //! writes are awaited through `Db::call` (a blocking task on one SQLite connection).
 
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bia_core::draw::{identity_order, order_to_string, shuffle_order};
@@ -45,6 +46,7 @@ pub enum Cmd {
         tx: ClientTx,
         token: Option<String>,
         nickname: String,
+        ip: Option<IpAddr>,
         reply: oneshot::Sender<Result<i32, String>>,
     },
     Answer {
@@ -53,6 +55,7 @@ pub enum Cmd {
     },
     StudentDetach {
         player_id: i32,
+        tx: ClientTx,
     },
     Timer {
         generation: u64,
@@ -83,12 +86,14 @@ impl RoomHandle {
         tx: ClientTx,
         token: Option<String>,
         nickname: String,
+        ip: Option<IpAddr>,
     ) -> oneshot::Receiver<Result<i32, String>> {
         let (reply, rx) = oneshot::channel();
         let _ = self.tx.try_send(Cmd::StudentJoin {
             tx,
             token,
             nickname,
+            ip,
             reply,
         });
         rx
@@ -98,8 +103,8 @@ impl RoomHandle {
         let _ = self.tx.try_send(Cmd::Answer { player_id, choice });
     }
 
-    pub fn detach_student(&self, player_id: i32) {
-        let _ = self.tx.try_send(Cmd::StudentDetach { player_id });
+    pub fn detach_student(&self, player_id: i32, tx: ClientTx) {
+        let _ = self.tx.try_send(Cmd::StudentDetach { player_id, tx });
     }
 }
 
@@ -118,6 +123,8 @@ struct PlayerState {
     nickname: String,
     token: String,
     points: i64,
+    /// Last address seen for this player, used to recover a lost token.
+    ip: Option<IpAddr>,
 }
 
 struct Room {
@@ -197,13 +204,29 @@ impl Room {
                         Cmd::TeacherAttach(tx) => {
                             self.teacher_tx = Some(tx);
                             self.send_room_state_teacher();
-                            if self.phase == Phase::Question {
-                                if let Some(index) = self.index {
-                                    let q = self.questions[index].clone();
-                                    self.send_question_teacher(&q, index);
-                                }
-                                if self.paused_remaining.is_some() {
-                                    self.send_paused(true, self.paused_remaining);
+                            // Replay whatever the teacher's screen needs after a reload.
+                            if let Some(index) = self.index {
+                                match self.phase {
+                                    Phase::Question => {
+                                        let question = self.questions[index].clone();
+                                        self.send_question_teacher(&question, index);
+                                        if self.paused_remaining.is_some() {
+                                            self.send_paused(true, self.paused_remaining);
+                                        }
+                                    }
+                                    Phase::RevealAnswer => {
+                                        let question = self.questions[index].clone();
+                                        self.send_question_teacher(&question, index);
+                                        if let Some(message) = self.reveal_message(index) {
+                                            self.send_teacher(message);
+                                        }
+                                    }
+                                    Phase::RevealLeaderboard => {
+                                        self.send_teacher(ServerMsg::Leaderboard {
+                                            top: self.top(7),
+                                        });
+                                    }
+                                    _ => {}
                                 }
                             }
                             self.send_current_answers_status();
@@ -213,9 +236,10 @@ impl Room {
                             tx,
                             token,
                             nickname,
+                            ip,
                             reply,
                         } => {
-                            let result = self.join_student(tx, token, nickname).await;
+                            let result = self.join_student(tx, token, nickname, ip).await;
                             let _ = reply.send(result);
                         }
                         Cmd::Answer { player_id, choice } => {
@@ -225,8 +249,16 @@ impl Room {
                                 }
                             }
                         }
-                        Cmd::StudentDetach { player_id } => {
-                            self.student_txs.remove(&player_id);
+                        Cmd::StudentDetach { player_id, tx } => {
+                            // A reload reconnects before the old socket's detach is
+                            // handled: only drop the sender this player still uses.
+                            if self
+                                .student_txs
+                                .get(&player_id)
+                                .is_some_and(|current| current.same_channel(&tx))
+                            {
+                                self.student_txs.remove(&player_id);
+                            }
                         }
                         Cmd::Timer { generation } => {
                             if generation == self.generation {
@@ -341,7 +373,22 @@ impl Room {
         self.generation += 1;
         self.send_room_state_all();
 
-        let question = self.questions[position].clone();
+        if let Some(message) = self.reveal_message(position) {
+            self.send_teacher(message);
+        }
+        for (player_id, tx) in &self.student_txs {
+            let correct = self
+                .answers
+                .get(&(position, *player_id))
+                .map(|a| a.is_correct)
+                .unwrap_or(false);
+            let _ = tx.try_send(ServerMsg::QuestionResult { correct });
+        }
+    }
+
+    /// The reveal payload for one question, rebuilt from the current answers.
+    fn reveal_message(&self, position: usize) -> Option<ServerMsg> {
+        let question = self.questions.get(position)?;
         let correct_index = self
             .order
             .iter()
@@ -353,21 +400,11 @@ impl Room {
                 counts[answer.display_choice] += 1;
             }
         }
-        let correct_text = question.choices()[question.answer_idx as usize].to_string();
-
-        self.send_teacher(ServerMsg::QuestionReveal {
+        Some(ServerMsg::QuestionReveal {
             correct_index,
             counts,
-            correct_text,
-        });
-        for (player_id, tx) in &self.student_txs {
-            let correct = self
-                .answers
-                .get(&(position, *player_id))
-                .map(|a| a.is_correct)
-                .unwrap_or(false);
-            let _ = tx.try_send(ServerMsg::QuestionResult { correct });
-        }
+            correct_text: question.choices()[question.answer_idx as usize].to_string(),
+        })
     }
 
     fn show_leaderboard(&mut self) {
@@ -459,39 +496,20 @@ impl Room {
         tx: ClientTx,
         token: Option<String>,
         nickname: String,
+        ip: Option<IpAddr>,
     ) -> Result<i32, String> {
         if self.phase == Phase::Podium {
             return Err("La partie est terminée.".into());
         }
 
         if let Some(existing_id) = token.as_deref().and_then(|t| self.by_token(t)) {
-            self.student_txs.insert(existing_id, tx.clone());
-            let me = &self.players[&existing_id];
-            let _ = tx.try_send(ServerMsg::PlayerWelcome {
-                token: me.token.clone(),
-                player_id: existing_id,
-            });
-            let _ = tx.try_send(ServerMsg::RoomState {
-                phase: self.phase,
-                code: self.code.clone(),
-                player_count: self.players.len(),
-                players: self.player_views(),
-            });
-            if self.phase == Phase::Question {
-                if let Some(index) = self.index {
-                    let question = self.questions[index].clone();
-                    self.send_question_to(&tx, &question, index);
-                }
-                if let Some(remaining) = self.paused_remaining {
-                    let _ = tx.try_send(ServerMsg::Paused {
-                        paused: true,
-                        remaining_ms: Some(remaining),
-                    });
-                }
-            }
-            self.send_room_state_teacher();
-            self.send_current_answers_status();
-            return Ok(existing_id);
+            return Ok(self.reattach(existing_id, tx, ip));
+        }
+
+        // No usable token: the browser may have lost it (private mode, storage
+        // cleared). Recover the player when the same address reuses its nickname.
+        if let Some(existing_id) = self.by_ip_and_nickname(ip, &nickname) {
+            return Ok(self.reattach(existing_id, tx, ip));
         }
 
         if self.players.len() >= self.max_players {
@@ -511,6 +529,7 @@ impl Room {
                 nickname,
                 token: token.clone(),
                 points: 0,
+                ip,
             },
         );
         self.student_txs.insert(id, tx.clone());
@@ -536,10 +555,74 @@ impl Room {
         Ok(id)
     }
 
+    /// Re-attach a socket to an existing player and replay its current view.
+    fn reattach(&mut self, existing_id: i32, tx: ClientTx, ip: Option<IpAddr>) -> i32 {
+        if let Some(player) = self.players.get_mut(&existing_id) {
+            if ip.is_some() {
+                player.ip = ip;
+            }
+        }
+        self.student_txs.insert(existing_id, tx.clone());
+        let me = &self.players[&existing_id];
+        let _ = tx.try_send(ServerMsg::PlayerWelcome {
+            token: me.token.clone(),
+            player_id: existing_id,
+        });
+        let _ = tx.try_send(ServerMsg::RoomState {
+            phase: self.phase,
+            code: self.code.clone(),
+            player_count: self.players.len(),
+            players: self.player_views(),
+        });
+        if let Some(index) = self.index {
+            let question = self.questions[index].clone();
+            self.send_question_to(&tx, &question, index);
+            // Restore the player's own answer so a reload shows the same state.
+            if let Some(answer) = self.answers.get(&(index, existing_id)) {
+                let _ = tx.try_send(ServerMsg::AnswerSaved {
+                    choice: answer.display_choice,
+                });
+            }
+            match self.phase {
+                Phase::Question => {
+                    if let Some(remaining) = self.paused_remaining {
+                        let _ = tx.try_send(ServerMsg::Paused {
+                            paused: true,
+                            remaining_ms: Some(remaining),
+                        });
+                    }
+                }
+                Phase::RevealAnswer | Phase::RevealLeaderboard => {
+                    let correct = self
+                        .answers
+                        .get(&(index, existing_id))
+                        .map(|answer| answer.is_correct)
+                        .unwrap_or(false);
+                    let _ = tx.try_send(ServerMsg::QuestionResult { correct });
+                }
+                _ => {}
+            }
+        }
+        self.send_room_state_teacher();
+        self.send_current_answers_status();
+        existing_id
+    }
+
     fn by_token(&self, token: &str) -> Option<i32> {
         self.players
             .iter()
             .find(|(_, p)| p.token == token)
+            .map(|(id, _)| *id)
+    }
+
+    /// Players are unique per room and nicknames are unique too, so the same
+    /// address + nickname identifies a player who lost their token.
+    fn by_ip_and_nickname(&self, ip: Option<IpAddr>, nickname: &str) -> Option<i32> {
+        let ip = ip?;
+        let wanted = sanitize_nickname(nickname).to_lowercase();
+        self.players
+            .iter()
+            .find(|(_, player)| player.ip == Some(ip) && player.nickname.to_lowercase() == wanted)
             .map(|(id, _)| *id)
     }
 

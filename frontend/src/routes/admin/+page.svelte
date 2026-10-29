@@ -1,20 +1,25 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
+    endRoom,
     fetchAdminStats,
     fetchJob,
     fetchMe,
+    fetchRoom,
     startImport,
     type AdminStats,
     type ImportJob,
     type Me,
+    type RoomStatus,
   } from '$lib/api';
 
   let me = $state<Me | null>(null);
   let stats = $state<AdminStats | null>(null);
   let job = $state<ImportJob | null>(null);
+  let room = $state<RoomStatus | null>(null);
   let error = $state('');
   let busy = $state(false);
+  let ending = $state(false);
 
   let timer: number | null = null;
 
@@ -31,12 +36,18 @@
       me = await fetchMe();
       stats = await fetchAdminStats();
       job = await fetchJob();
+      room = await fetchRoom();
     } catch (cause) {
       error = String(cause);
     }
   }
 
   async function refresh(): Promise<void> {
+    try {
+      room = await fetchRoom();
+    } catch {
+      /* polling errors are ignored; the next tick retries */
+    }
     try {
       const next = await fetchJob();
       const wasRunning = job?.state === 'downloading' || job?.state === 'importing';
@@ -59,6 +70,32 @@
       error = String(cause);
     } finally {
       busy = false;
+    }
+  }
+
+  async function endSession(): Promise<void> {
+    if (!room?.live) return;
+    if (
+      !confirm(
+        `Terminer la partie ${room.code} en cours ? Les joueurs verront le classement final.`,
+      )
+    ) {
+      return;
+    }
+    error = '';
+    ending = true;
+    try {
+      await endRoom();
+      // The room closes asynchronously; poll briefly so the card clears at once.
+      for (let attempt = 0; attempt < 10; attempt++) {
+        room = await fetchRoom();
+        if (!room.live) break;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+    } catch (cause) {
+      error = String(cause);
+    } finally {
+      ending = false;
     }
   }
 
@@ -107,6 +144,32 @@
         <div class="card" style="flex:1;min-width:140px"><strong>{stats.figures}</strong><br /><span class="muted">figures</span></div>
         <div class="card" style="flex:1;min-width:140px"><strong>{stats.chapters}</strong><br /><span class="muted">chapitres</span></div>
         <div class="card" style="flex:1;min-width:140px"><strong>{human(stats.db_bytes)}</strong><br /><span class="muted">base SQLite</span></div>
+      </div>
+
+      <div class="card stack">
+        <div class="row">
+          <h2>Partie en cours</h2>
+          <span class="spacer"></span>
+          {#if room?.live}
+            <span class="badge">code {room.code}</span>
+          {:else}
+            <span class="badge no">aucune</span>
+          {/if}
+        </div>
+        {#if room?.live}
+          <p class="small muted">
+            Les joueurs peuvent rejoindre cette partie à l'adresse
+            <span class="mono">{room.join_url}</span>. La terminer clôt la session et
+            affiche le classement final ; l'import redevient possible.
+          </p>
+          <div>
+            <button class="btn" disabled={ending} onclick={endSession}>
+              {ending ? 'Fin en cours…' : 'Terminer la partie'}
+            </button>
+          </div>
+        {:else}
+          <p class="small muted">Aucune partie en cours.</p>
+        {/if}
       </div>
 
       <div class="card stack">

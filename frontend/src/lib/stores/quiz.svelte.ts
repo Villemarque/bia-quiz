@@ -16,6 +16,11 @@ function cachedJoinUrlKey(code: string): string {
   return `bia-join-url:${code}`;
 }
 
+/** Player token for one room, so reloading a game reconnects instead of rejoining. */
+export function playerTokenKey(code: string): string {
+  return `bia-token:${code}`;
+}
+
 /**
  * One client for both roles. The room is the source of truth: this object only
  * mirrors what the server pushes, plus a local countdown for display.
@@ -123,7 +128,7 @@ export class QuizClient {
       case 'player.welcome':
         this.token = message.token;
         this.playerId = message.player_id;
-        writeLocal('bia-token', message.token);
+        writeLocal(playerTokenKey(this.code), message.token);
         break;
       case 'question.start':
         this.question = message as QuestionStart;
@@ -169,6 +174,9 @@ export class QuizClient {
       case 'paused':
         this.paused = Boolean(message.paused);
         if (this.paused) {
+          if (typeof message.remaining_ms === 'number') {
+            this.remaining = Math.max(0, message.remaining_ms);
+          }
           this.stopTimer();
         } else if (typeof message.remaining_ms === 'number') {
           this.startTimer(message.remaining_ms);

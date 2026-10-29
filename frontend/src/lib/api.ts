@@ -154,3 +154,14 @@ export async function startImport(): Promise<void> {
     throw new Error((await response.text()) || `HTTP ${response.status}`);
   }
 }
+
+export async function endRoom(): Promise<void> {
+  const response = await fetch('/api/admin/room/end', { method: 'POST' });
+  if (response.status === 401) {
+    redirectToLogin();
+    return;
+  }
+  if (!response.ok) {
+    throw new Error((await response.text()) || `HTTP ${response.status}`);
+  }
+}

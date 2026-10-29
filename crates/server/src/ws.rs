@@ -1,10 +1,11 @@
 //! WebSocket entry point. One socket per client, JSON messages.
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Query, State};
+use axum::extract::{ConnectInfo, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use std::collections::HashMap;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -77,6 +78,7 @@ pub async fn ws(
     upgrade: WebSocketUpgrade,
     State(state): State<AppState>,
     Query(query): Query<WsQuery>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> Response {
     // `/teacher` itself stays public; the control socket is same-origin only.
@@ -91,17 +93,18 @@ pub async fn ws(
         return (StatusCode::SERVICE_UNAVAILABLE, "Trop de connexions.").into_response();
     }
     let guard = ConnectionGuard;
+    let ip = crate::auth::client_ip(&headers, Some(peer));
 
     upgrade
         .max_message_size(MAX_MESSAGE_BYTES)
         .max_frame_size(MAX_MESSAGE_BYTES)
         .on_upgrade(move |socket| {
             let _guard = guard;
-            handle(socket, state, query)
+            handle(socket, state, query, ip)
         })
 }
 
-async fn handle(socket: WebSocket, state: AppState, query: WsQuery) {
+async fn handle(socket: WebSocket, state: AppState, query: WsQuery, ip: Option<IpAddr>) {
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = mpsc::channel::<ServerMsg>(room::CLIENT_QUEUE);
 
@@ -137,6 +140,7 @@ async fn handle(socket: WebSocket, state: AppState, query: WsQuery) {
                 query.token.as_deref(),
                 &mut stream,
                 &tx,
+                ip,
             )
             .await
         }
@@ -383,6 +387,7 @@ async fn student_loop(
     token: Option<&str>,
     stream: &mut futures_util::stream::SplitStream<WebSocket>,
     tx: &ClientTx,
+    ip: Option<IpAddr>,
 ) {
     let _ = tx.try_send(ServerMsg::Hello {
         role: "student".into(),
@@ -435,7 +440,7 @@ async fn student_loop(
                     continue;
                 }
                 let reply: oneshot::Receiver<Result<i32, String>> =
-                    room.join_student(tx.clone(), token.map(str::to_string), nickname);
+                    room.join_student(tx.clone(), token.map(str::to_string), nickname, ip);
                 match reply.await {
                     Ok(Ok(id)) => player_id = Some(id),
                     Ok(Err(message)) => {
@@ -467,7 +472,7 @@ async fn student_loop(
     }
 
     if let Some(id) = player_id {
-        room.detach_student(id);
+        room.detach_student(id, tx.clone());
     }
 }
 
