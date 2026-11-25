@@ -444,6 +444,91 @@ async fn student_without_token_is_recognised_by_ip_and_name() {
 }
 
 #[tokio::test]
+async fn single_disconnected_player_is_recovered_by_ip_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::open(&dir.path().join("test.sqlite3")).unwrap();
+    seed(&db).await;
+    db.call(|conn| {
+        diesel::sql_query("UPDATE questions SET seconds = 60").execute(conn)?;
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    let mut config = Config::default();
+    config.server.public_base_url = "http://test.local".into();
+    let base = start_server(&db, config).await;
+
+    let mut teacher = teacher_socket(&base, None).await;
+    assert_eq!(next_json(&mut teacher, "hello").await["type"], "hello");
+    send(
+        &mut teacher,
+        serde_json::json!({
+            "type": "teacher.create",
+            "chapters": [{ "subject": 2, "chapter": 0, "count": 1 }],
+            "seconds": 5
+        }),
+    )
+    .await;
+    let created = wait_for(&mut teacher, "room.created").await;
+    let code = created["code"].as_str().unwrap().to_string();
+
+    let mut student = connect_async(format!("{base}?role=student&room={code}"))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(next_json(&mut student, "hello").await["type"], "hello");
+    send(
+        &mut student,
+        serde_json::json!({ "type": "student.join", "nickname": "Max" }),
+    )
+    .await;
+    let welcome = wait_for(&mut student, "player.welcome").await;
+    let token = welcome["token"].as_str().unwrap().to_string();
+
+    send(
+        &mut teacher,
+        serde_json::json!({ "type": "teacher.start_question" }),
+    )
+    .await;
+    let _ = wait_for(&mut student, "question.start").await;
+    send(
+        &mut student,
+        serde_json::json!({ "type": "student.answer", "choice": 0 }),
+    )
+    .await;
+    let _ = wait_for(&mut student, "answer.saved").await;
+
+    // The only player at this address disconnects (reload, tab closed, network drop).
+    drop(student);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    // Reconnecting with a different name still recovers that player.
+    let mut recovered = connect_async(format!("{base}?role=student&room={code}"))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(next_json(&mut recovered, "hello").await["type"], "hello");
+    send(
+        &mut recovered,
+        serde_json::json!({ "type": "student.join", "nickname": "Robert" }),
+    )
+    .await;
+    let welcome = wait_for(&mut recovered, "player.welcome").await;
+    assert_eq!(
+        welcome["token"], token,
+        "the disconnected player is recovered"
+    );
+    assert_eq!(welcome["nickname"], "Max");
+    let state = wait_for(&mut recovered, "room.state").await;
+    assert_eq!(state["player_count"], 1, "no duplicate player is created");
+    assert_eq!(state["players"][0]["nickname"], "Max");
+    let _ = wait_for(&mut recovered, "question.start").await;
+    let saved = wait_for(&mut recovered, "answer.saved").await;
+    assert_eq!(saved["choice"], 0);
+}
+
+#[tokio::test]
 async fn teacher_reload_restores_current_view() {
     let dir = tempfile::tempdir().unwrap();
     let db = Db::open(&dir.path().join("test.sqlite3")).unwrap();

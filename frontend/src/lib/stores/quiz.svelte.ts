@@ -53,6 +53,8 @@ export class QuizClient {
   remaining = $state(0);
   token = $state('');
   playerId = $state<number | null>(null);
+  /** Server-side nickname, authoritative after a reconnect with a different typed name. */
+  nickname = $state('');
 
   private socket: JsonSocket | null = null;
   private joinArgs: { token: string; nickname: string } | null = null;
@@ -128,7 +130,9 @@ export class QuizClient {
       case 'player.welcome':
         this.token = message.token;
         this.playerId = message.player_id;
+        this.nickname = message.nickname ?? '';
         writeLocal(playerTokenKey(this.code), message.token);
+        if (this.nickname) writeLocal('bia-nickname', this.nickname);
         break;
       case 'question.start':
         this.question = message as QuestionStart;

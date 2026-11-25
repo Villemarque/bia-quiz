@@ -506,7 +506,12 @@ impl Room {
             return Ok(self.reattach(existing_id, tx, ip));
         }
 
-        // No usable token: the browser may have lost it (private mode, storage
+        // Only one player at this address and nobody is using it: that is a reload.
+        if let Some(existing_id) = self.single_disconnected_on_ip(ip) {
+            return Ok(self.reattach(existing_id, tx, ip));
+        }
+
+        // Otherwise the browser may have lost its token (private mode, storage
         // cleared). Recover the player when the same address reuses its nickname.
         if let Some(existing_id) = self.by_ip_and_nickname(ip, &nickname) {
             return Ok(self.reattach(existing_id, tx, ip));
@@ -537,6 +542,7 @@ impl Room {
         let _ = tx.try_send(ServerMsg::PlayerWelcome {
             token,
             player_id: id,
+            nickname: self.players[&id].nickname.clone(),
         });
         let _ = tx.try_send(ServerMsg::RoomState {
             phase: self.phase,
@@ -567,6 +573,7 @@ impl Room {
         let _ = tx.try_send(ServerMsg::PlayerWelcome {
             token: me.token.clone(),
             player_id: existing_id,
+            nickname: me.nickname.clone(),
         });
         let _ = tx.try_send(ServerMsg::RoomState {
             phase: self.phase,
@@ -624,6 +631,22 @@ impl Room {
             .iter()
             .find(|(_, player)| player.ip == Some(ip) && player.nickname.to_lowercase() == wanted)
             .map(|(id, _)| *id)
+    }
+
+    /// The only player ever seen at this address, when they are not connected:
+    /// a reload from the same household, whatever name is typed.
+    fn single_disconnected_on_ip(&self, ip: Option<IpAddr>) -> Option<i32> {
+        let ip = ip?;
+        let mut candidates = self
+            .players
+            .iter()
+            .filter(|(_, player)| player.ip == Some(ip));
+        let (id, _) = candidates.next()?;
+        if candidates.next().is_some() {
+            return None;
+        }
+        let disconnected = self.student_txs.get(id).is_none_or(|tx| tx.is_closed());
+        disconnected.then_some(*id)
     }
 
     fn unique_nickname(&self, wanted: &str) -> String {

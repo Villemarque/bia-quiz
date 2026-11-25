@@ -101,7 +101,11 @@ pub enum ServerMsg {
     },
 
     #[serde(rename = "player.welcome")]
-    PlayerWelcome { token: String, player_id: i32 },
+    PlayerWelcome {
+        token: String,
+        player_id: i32,
+        nickname: String,
+    },
 
     #[serde(rename = "question.start")]
     QuestionStart {

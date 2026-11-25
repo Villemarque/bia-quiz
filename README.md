@@ -17,9 +17,10 @@ question the projector shows the answer then the top 7; the session ends with a 
 Reloading a game keeps your seat: students reconnect with a per-room token in
 `localStorage`, and the teacher console replays the current question, reveal or
 leaderboard. If a student's token is gone (private browsing, storage cleared), the
-server recovers the same player when the join comes from the same client IP **and**
-uses the same nickname (case-insensitive). That address only lives in memory for the
-duration of the live room; it is never written to SQLite.
+server recovers the player from the same client IP — automatically when that address
+has a single player who is disconnected, otherwise when the nickname also matches
+(case-insensitive). That address only lives in memory for the duration of the live
+room; it is never written to SQLite.
 
 ## Layout
 

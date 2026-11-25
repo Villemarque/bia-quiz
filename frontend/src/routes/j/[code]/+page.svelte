@@ -123,7 +123,7 @@
       <h1>Partie terminée</h1>
       <div class="big-rank">{client.final.my_rank ?? '—'}</div>
       <p class="mono">{client.final.my_points ?? 0} points</p>
-      <p class="small muted">Bien joué, {nickname} !</p>
+      <p class="small muted">Bien joué, {client.nickname || nickname} !</p>
       <a class="btn btn-primary" href="/">Retour</a>
     </div>
   {:else if client.question}
@@ -184,7 +184,7 @@
     <div class="card stack" style="margin:auto; text-align:center; max-width:420px">
       <h1>Vous êtes en attente</h1>
       <p class="muted">
-        Bonjour <strong>{nickname}</strong> — {client.playerCount} joueur(s) connecté(s)
+        Bonjour <strong>{client.nickname || nickname}</strong> — {client.playerCount} joueur(s) connecté(s)
       </p>
       {#if client.players.length > 0}
         <div class="player-chips" style="justify-content:center">
